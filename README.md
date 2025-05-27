@@ -10,3 +10,4 @@ To run the bot directly (`python3 bot.py`), all you should need is a working Lin
 ```
 pip install python-telegram-bot
 ```
+Remember to add your Telegram user ID and bot token to `tg.conf` !
