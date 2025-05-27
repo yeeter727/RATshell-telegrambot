@@ -8,5 +8,5 @@ A very simple remote access tool using the python-telegram-bot Python module to 
 ### Setup
 To run the bot directly (`python3 bot.py`), all you should need is a working Linux system and the `python-telegram-bot` module:
 ```
-pip3 install python-telegram-bot
+pip install python-telegram-bot
 ```
