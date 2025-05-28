@@ -82,7 +82,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Get IP Info", callback_data='get_ip')],
         [InlineKeyboardButton("Neofetch", callback_data='run_neofetch')],
-        [InlineKeyboardButton("Print Access Log", callback_data='print_unauth')]
+        [InlineKeyboardButton("Print Access Log", callback_data='print_log')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -141,7 +141,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(text=output, reply_markup=reply_markup, parse_mode='HTML')
 
-    elif query.data == 'print_unauth':
+    elif query.data == 'print_log':
         with open(access_log, 'r') as file:
             content = file.read()
 
@@ -155,7 +155,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("Get IP Info", callback_data='get_ip')],
             [InlineKeyboardButton("Run Neofetch", callback_data='run_neofetch')],
-            [InlineKeyboardButton("Print Access Log", callback_data='print_unauth')]
+            [InlineKeyboardButton("Print Access Log", callback_data='print_log')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=start_message, reply_markup=reply_markup)
