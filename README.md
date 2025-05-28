@@ -11,7 +11,7 @@ pip install python-telegram-bot
 If not already installed, neofetch and curl: `sudo apt install neofetch curl`
 Remember to add your Telegram user ID and bot token to `tg.conf` !
 
-## Optional: 
+#### Optional: 
 Reccomended command list to send to BotFather:
 ```
 start - open start menu
