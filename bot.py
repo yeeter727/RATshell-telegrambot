@@ -63,6 +63,13 @@ def in_termux():
     )
 termux = in_termux()
 
+# check if running in windows
+def in_windows():
+    return (
+        os.name == "nt"
+    )
+win = in_windows()
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -103,8 +110,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == 'run_neofetch':
         try:
-            result = subprocess.run(['neofetch', '--stdout'], capture_output=True, text=True, timeout=10)
-            output = result.stdout.strip() or "No output from neofetch."
+            if win:
+                result = subprocess.run(['fastfetch', '-l', 'none', '-s', 'title:separator:os:host:uptime:shell:cpu:memory:disk:break:separator:localip:publicip'], capture_output=True, text=True, timeout=10)
+                output = result.stdout.strip() or "No output from fastfetch.exe"
+            else:
+                result = subprocess.run(['neofetch', '--stdout'], capture_output=True, text=True, timeout=10)
+                output = result.stdout.strip() or "No output from neofetch."
         except Exception as e:
             output = f"Error: {str(e)}"
 
@@ -125,6 +136,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # get public IP address
                 pub_ip = subprocess.run(['curl', 'ifconfig.me'], capture_output=True, text=True, timeout=10)
                 output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
+            elif win:
+                result = subprocess.run(['fastfetch', '-l', 'none', '-s', 'localip:publicip'], capture_output=True, text=True, timeout=10)
+                output = result.stdout.strip()
             else:
                 # get interfaces and addresses
                 ip_cmd = "ip -o -4 a | awk '$2 != \"lo\" {print $2, $4}'"
@@ -201,8 +215,12 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
         # user is in shell mode, execute the command
         command = update.message.text.strip()  # Get the command from the message
         try:
-            result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            output = result.stdout.decode('utf-8')
+            if win:
+                result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+                output = result.stdout.decode('utf-8')
+            else:
+                result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                output = result.stdout.decode('utf-8')
             await context.bot.send_message(chat_id=update.effective_chat.id, text=output)
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
