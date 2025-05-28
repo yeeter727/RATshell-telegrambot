@@ -1,5 +1,5 @@
 #!/bin/python
-# Makeshift remote shell telegram bot (RATelegram) for linux systems
+# Makeshift remote shell telegram bot for linux systems
 # it can also archive videos/photos sent to it (only saves TG file IDs, does not download files)
 
 import subprocess
@@ -10,15 +10,28 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 
-#########################
-# read config file
-with open("tg.conf") as f:
-    exec(f.read(), globals())
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+######### STARTUP #########
+# read config file
+if os.path.exists("tg.conf"):
+    with open("tg.conf") as f:
+        exec(f.read(), globals())
+    # exit if default value
+    if admin_id == 123456789:
+        print("It looks like the tg.conf file has default values. \nPlease make sure to add your ID and token to tg.conf.")
+        exit()
+else:
+    print("Missing required tg.conf file. \nDid you download it?")
+    exit()
+
+# create access_log if not found
+if not os.path.exists(access_log):
+    with open(access_log, 'w') as f:
+        f.write(
+            "#######################\n"
+            "UNAUTHORIZED ACTION LOG\n"
+            "#######################"
+        )
 
 user_state = {}                   # dictionary to store the state of each user
 user_state[admin_id] = 'shell'    # allow admin to immediately send commands
@@ -28,15 +41,33 @@ def load_media_links():
     if os.path.exists(media_file):
         with open(media_file, 'r') as f:
             return [line.strip() for line in f.readlines()]
-    return []
+    else:
+        # create media_file if it doesnt exist
+        with open(media_file, 'w') as f:
+            pass
+        return []
+media_links = load_media_links()
 
 def save_media_links(media_links):
     with open(media_file, 'w') as f:
         for link in media_links:
             f.write(f"{link}\n")
 
-media_links = load_media_links()
-#######################
+# function to check if running in termux
+def in_termux():
+    prefix = os.environ.get("PREFIX")
+    home = os.environ.get("HOME")
+    return (
+        prefix == "/data/data/com.termux/files/usr"
+        or (home and home.startswith("/data/data/com.termux"))
+    )
+termux = in_termux()
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+###########################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -44,7 +75,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = update.effective_user.username
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{now}] [/start] User @{username}\n")
+            f.write(f"\n[{now}] [/start] User @{username}")
         await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
         return
 
@@ -59,14 +90,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # Acknowledge the button press
+    await query.answer()
 
     user_id = update.effective_user.id
     if query.from_user.id != admin_id: 
         username = update.effective_user.username
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{now}] [{query.data} button] User @{username}\n")
+            f.write(f"\n[{now}] [{query.data} button] User @{username}")
         await query.edit_message_text(text="Access denied.")
         return
 
@@ -84,20 +115,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == 'get_ip':
         try:
-            ## this works in termux instead of `ip addr` command
-            # get local IP address
-            #s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            #s.connect(("9.9.9.9", 80))
-            #local_ip = s.getsockname()[0]
-            #s.close()
-            
-            # get interfaces and addresses
-            ip_cmd = "ip -o -4 a | awk '$2 != \"lo\" {print $2, $4}'"
-            interfaces = subprocess.run(ip_cmd, shell=True, capture_output=True, text=True)
+            if termux:
+                # get local IP address through termux-friendly method
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("9.9.9.9", 80))       # no actual connection made
+                local_ip = s.getsockname()[0]
+                s.close()
 
-            # get public IP address
-            pub_ip = subprocess.run(['curl', 'ifconfig.me'], capture_output=True, text=True, timeout=10)
-            output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nDevice Interfaces:\n<code>{interfaces.stdout.strip()}</code>" or "No output from curl or socket connection."
+                # get public IP address
+                pub_ip = subprocess.run(['curl', 'ifconfig.me'], capture_output=True, text=True, timeout=10)
+                output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
+            else:
+                # get interfaces and addresses
+                ip_cmd = "ip -o -4 a | awk '$2 != \"lo\" {print $2, $4}'"
+                interfaces = subprocess.run(ip_cmd, shell=True, capture_output=True, text=True)
+
+                # get public IP address
+                pub_ip = subprocess.run(['curl', 'ifconfig.me'], capture_output=True, text=True, timeout=10)
+                output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nDevice Interfaces:\n<code>{interfaces.stdout.strip()}</code>" or "No output from curl or ip addr commands."
         except Exception as e:
             output = f"Error: {str(e)}"
         
@@ -138,7 +173,7 @@ async def enter_shell_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = update.effective_user.username
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{now}] [/x (enter shell)] User @{username}\n")
+            f.write(f"\n[{now}] [/x (enter shell)] User @{username}")
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
 
 
@@ -158,7 +193,7 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
         username = update.effective_user.username
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{now}] [Unsolicited message] User @{username}\n")
+            f.write(f"\n[{now}] [Unsolicited message] User @{username}")
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
 
@@ -180,7 +215,7 @@ async def archive_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = update.effective_user.username
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{now}] [Sent media] User @{username}\n")
+            f.write(f"\n[{now}] [Sent media] User @{username}")
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
 
@@ -213,15 +248,9 @@ async def archive_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if media_id in media_links:
             media_links.remove(media_id)
             save_media_links(media_links)
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"Removed \n[{media_id}]"
-            )
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed \n[{media_id}]")
         else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"Not found \n[{media_id}]"
-            )
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Not found \n[{media_id}]")
         # stop waiting for media to remove
         del context.user_data['remove_next']
 
@@ -233,7 +262,7 @@ async def remove_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = update.effective_user.username
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{now}] [/r (remove media)] User @{username}\n")
+            f.write(f"\n[{now}] [/r (remove media)] User @{username}")
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Send item to be removed.")
@@ -247,7 +276,7 @@ async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = update.effective_user.username
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"[{now}] [/v (foward media)] User @{username}\n")
+            f.write(f"\n[{now}] [/v (foward media)] User @{username}")
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
 
