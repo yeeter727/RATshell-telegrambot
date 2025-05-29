@@ -12,6 +12,10 @@ from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHan
 # read config file
 with open("tg.conf") as f:
     exec(f.read(), globals())
+
+if admin_id == 123456789:
+    print("\nIt looks like the tg.conf file has default values. \nPlease make sure to add your ID and token to tg.conf. \n")
+    exit()
     
 # create access_log if not found
 if not os.path.exists(access_log):
