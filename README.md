@@ -21,6 +21,10 @@ This bot has been tested on **Linux**, **Windows 10/11**, and the **Android Term
 *Note:* On Windows, this bot uses powershell, so all of it's aliases will work (ls, cp, mv, pwd).
 
   \
+**`lightweight-bot.py`**: This is a much smaller bot that has no buttons, does not archive media, but still maintains an access log and supports the 3 platforms listed above. \
+So pretty much just executing messages as shell commands and non-admin access logging.
+
+  \
 ***Optional:*** \
 Reccomended command list to send to [BotFather](https://t.me/botfather):
 ```
