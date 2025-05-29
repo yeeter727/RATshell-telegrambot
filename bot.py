@@ -134,7 +134,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == 'get_ip':
         try:
-            if termux or win:
+            if termux:
                 # get local IP address through termux-friendly method
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 s.connect(("9.9.9.9", 80))       # no actual connection made
@@ -143,6 +143,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # get public IP address
                 pub_ip = subprocess.run(['curl', 'ifconfig.me'], capture_output=True, text=True, timeout=10)
+                output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
+            elif win:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("9.9.9.9", 80))       # no actual connection made
+                local_ip = s.getsockname()[0]
+                s.close()
+
+                # get public IP address
+                pub_ip = subprocess.run("$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest https://ifconfig.me/ip).Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10)
                 output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
             else:
                 # get interfaces and addresses
