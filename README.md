@@ -18,7 +18,7 @@ sudo apt install neofetch curl    # these are only necessary for some of the but
   
 ### - Platforms
 This bot has been tested on **Linux**, **Windows 10/11**, and the **Android Termux app.** \
-Note: On Windows, this bot uses powershell, so all of it's aliases will work (ls, cp, mv, pwd).
+*Note:* On Windows, this bot uses powershell, so all of it's aliases will work (ls, cp, mv, pwd).
 
   \
 ***Optional:*** \
