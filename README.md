@@ -1,17 +1,25 @@
-# RAT-telegrambot-for-linux
+# RATshell-telegrambot
 A very simple remote access tool using the `python-telegram-bot` module to execute shell commands.
 
 <img src="src/example.png" width="400"/>
 
-## Setup
-To run the bot directly (`python bot.py`), all you should need is a working Linux system (it should also work in Termux) and the `python-telegram-bot` module:
+### - Setup
+To run the bot directly, you'll need the `python-telegram-bot` module for all platforms:
 ```
 pip install python-telegram-bot
-
-sudo apt install neofetch curl    # if you don't have these
 ```
+Additionally, for Linux:
+```
+sudo apt install neofetch curl    # these are only necessary for some of the buttons
+```
+
 **Remember to add your Telegram user ID and bot token to `tg.conf`!**
- 
+
+  
+### - Platforms
+This bot has been tested on **Linux**, **Windows 10/11**, and the **Android Termux app.** \
+Note: On Windows, this bot uses powershell, so all of it's aliases will work (e.g. ls, cp, mv, etc).
+
   \
 ***Optional:*** \
 Reccomended command list to send to [BotFather](https://t.me/botfather):
