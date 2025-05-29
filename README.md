@@ -4,7 +4,7 @@ A very simple remote access tool using the `python-telegram-bot` module to execu
 <img src="src/example.png" width="400"/>
 
 ### - Setup
-To run the bot directly, you'll need the `python-telegram-bot` module for all platforms:
+To run the bot directly (`python bot.py`), you'll need the `python-telegram-bot` module for all platforms:
 ```
 pip install python-telegram-bot
 ```
