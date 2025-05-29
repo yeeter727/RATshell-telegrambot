@@ -22,7 +22,7 @@ This bot has been tested on **Linux**, **Windows 10/11**, and the **Android Term
 
   \
 **`lightweight-bot.py`**: This is a much smaller bot that has no buttons, does not archive media, but still maintains an access log and supports the 3 platforms listed above. \
-So pretty much just executing messages as shell commands and non-admin access logging.
+So it's just the shell and non-admin access logging.
 
   \
 ***Optional:*** \
