@@ -1,5 +1,5 @@
 #!/bin/python
-# Makeshift remote shell telegram bot for linux systems
+# Makeshift remote shell telegram bot
 # it can also archive videos/photos sent to it (only saves TG file IDs, does not download files)
 
 import subprocess
@@ -70,6 +70,14 @@ def in_windows():
     )
 win = in_windows()
 
+# install fastfetch if running in win and not already installed
+if win:
+    winget_list = subprocess.run(["winget", "list", "Fastfetch-cli.Fastfetch"], capture_output=True, text=True, timeout=10)
+    if not "Fastfetch-cli.Fastfetch" in winget_list.stdout:
+        print("Installing fastfetch (Windows version of neofetch) through winget...\n")
+        subprocess.run(["winget", "install", "--silent", "--accept-package-agreements", "--accept-source-agreements", "Fastfetch-cli.Fastfetch"])
+        print()
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -126,7 +134,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == 'get_ip':
         try:
-            if termux:
+            if termux or win:
                 # get local IP address through termux-friendly method
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 s.connect(("9.9.9.9", 80))       # no actual connection made
@@ -136,9 +144,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # get public IP address
                 pub_ip = subprocess.run(['curl', 'ifconfig.me'], capture_output=True, text=True, timeout=10)
                 output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
-            elif win:
-                result = subprocess.run(['fastfetch', '-l', 'none', '-s', 'localip:publicip'], capture_output=True, text=True, timeout=10)
-                output = result.stdout.strip()
             else:
                 # get interfaces and addresses
                 ip_cmd = "ip -o -4 a | awk '$2 != \"lo\" {print $2, $4}'"
