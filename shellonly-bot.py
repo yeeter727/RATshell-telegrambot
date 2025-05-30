@@ -1,5 +1,6 @@
 #!/bin/python
 # Makeshift remote shell telegram bot
+# this file only includes the shell and unauthorized access logging features
 
 import subprocess
 import logging
