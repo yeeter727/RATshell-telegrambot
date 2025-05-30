@@ -88,9 +88,12 @@ if win:
             print("Installing fastfetch (Windows version of neofetch) through winget...\n")
             subprocess.run(["winget", "install", "--silent", "--accept-package-agreements", "--accept-source-agreements", "Fastfetch-cli.Fastfetch"])
             print()
+            fastfetch = True
         else:
-            print("Skipping fastfetch install.")
-
+            print("Skipping fastfetch install. 'Run Neofetch' feature will not look as expected.")
+            fastfetch = False
+    else:
+        fastfetch = True
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 ###########################
 
@@ -117,7 +120,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == 'run_neofetch':
         try:
-            if win:
+            if win and fastfetch:
                 result = subprocess.run(['fastfetch', '-l', 'none', '-s', 'title:separator:os:host:uptime:shell:cpu:memory:disk:break:separator:localip:publicip'], capture_output=True, text=True, timeout=10)
                 output = result.stdout.strip() or "No output from fastfetch.exe"
             else:
