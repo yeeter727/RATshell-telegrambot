@@ -17,7 +17,7 @@ if os.path.exists("tg.conf"):
     with open("tg.conf") as f:
         exec(f.read(), globals())
     # exit if default value
-    if admin_id == 123456789:
+    if owner_id == 123456789:
         print("It looks like the tg.conf file has default values. \nPlease make sure to add your ID and token to tg.conf.")
         exit()
 else:
@@ -33,24 +33,33 @@ if not os.path.exists(access_log):
             "#######################"
         )
 
-user_state = {}                   # dictionary to store the state of each user
-user_state[admin_id] = 'shell'    # allow admin to immediately send commands
+# check if user is the owner
+def is_owner(update, action):
+    user_id = update.effective_user.id
+    if user_id != owner_id:
+        username = update.effective_user.username
+        with open(access_log, "a") as f:
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            f.write(f"\n[{now}] [{action}] User @{username}")
+        return False
+    else:
+        return True
 
-# load media links from the text file
-def load_media_links():
+# load media IDs from the text file
+def load_media_ids():
     if os.path.exists(media_file):
         with open(media_file, 'r') as f:
-            return [line.strip() for line in f.readlines()]
+            return [line.strip() for line in f.readlines() if line.strip()]
     else:
         # create media_file if it doesnt exist
         with open(media_file, 'w') as f:
             pass
         return []
-media_links = load_media_links()
+media_ids = load_media_ids()
 
-def save_media_links(media_links):
+def save_media_ids(media_ids):
     with open(media_file, 'w') as f:
-        for link in media_links:
+        for link in media_ids:
             f.write(f"{link}\n")
 
 # function to check if running in termux
@@ -65,32 +74,28 @@ termux = in_termux()
 
 # check if running in windows
 def in_windows():
-    return (
-        os.name == "nt"
-    )
+    return (os.name == "nt")
 win = in_windows()
 
 # install fastfetch if running in win and not already installed
 if win:
     winget_list = subprocess.run(["winget", "list", "Fastfetch-cli.Fastfetch"], capture_output=True, text=True, timeout=10)
     if not "Fastfetch-cli.Fastfetch" in winget_list.stdout:
-        print("Installing fastfetch (Windows version of neofetch) through winget...\n")
-        subprocess.run(["winget", "install", "--silent", "--accept-package-agreements", "--accept-source-agreements", "Fastfetch-cli.Fastfetch"])
-        print()
+        print("\nFastfetch is not installed (needed for the 'Run Neofetch' button).")
+        ff_install = input("Would you like to install it? (Y/n): ")
+        
+        if ff_install.lower() != "n":
+            print("Installing fastfetch (Windows version of neofetch) through winget...\n")
+            subprocess.run(["winget", "install", "--silent", "--accept-package-agreements", "--accept-source-agreements", "Fastfetch-cli.Fastfetch"])
+            print()
+        else:
+            print("Skipping fastfetch install.")
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 ###########################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != admin_id:
-        username = update.effective_user.username
-        with open(access_log, "a") as f:
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [/start] User @{username}")
+    if not is_owner(update, "/start"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
         return
 
@@ -100,19 +105,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Print Access Log", callback_data='print_log')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
     await update.message.reply_text(start_message, reply_markup=reply_markup)
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = update.effective_user.id
-    if query.from_user.id != admin_id: 
-        username = update.effective_user.username
-        with open(access_log, "a") as f:
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [{query.data} button] User @{username}")
+    if not is_owner(update, f"{query.data} button"):
         await query.edit_message_text(text="Access denied.")
         return
 
@@ -189,44 +188,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text=start_message, reply_markup=reply_markup)
 
 
-async def enter_shell_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id == admin_id:
-        if user_id not in user_state:
-            user_state[user_id] = 'shell'
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Entering shell mode. Type your commands.")
-        else:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Shell mode already enabled.")
-    else:
-        username = update.effective_user.username
-        with open(access_log, "a") as f:
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [/x (enter shell)] User @{username}")
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
-
-
-async def exit_shell_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id == admin_id and user_state.get(user_id) == 'shell':
-        del user_state[user_id]  # Remove the user's shell mode state
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Exiting shell mode.")
-    else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="You are not in shell mode.")
-
-
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if user_id != admin_id:
-        username = update.effective_user.username
-        with open(access_log, "a") as f:
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [Unsolicited message] User @{username}")
+    if not is_owner(update, "Unsolicited message"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
-
-    if user_state.get(user_id) == 'shell':
-        # user is in shell mode, execute the command
+    else:
         command = update.message.text.strip()  # Get the command from the message
         try:
             if win:
@@ -241,13 +207,7 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def archive_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if user_id != admin_id:
-        username = update.effective_user.username
-        with open(access_log, "a") as f:
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [Sent media] User @{username}")
+    if not is_owner(update, "Sent media"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
 
@@ -262,10 +222,10 @@ async def archive_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif update.message.video:
             file_id = update.message.video.file_id
 
-        if file_id and file_id not in media_links:
-            media_links.append(file_id)
+        if file_id and file_id not in media_ids:
+            media_ids.append(file_id)
 
-            save_media_links(media_links)
+            save_media_ids(media_ids)
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Archived \n[{file_id}]")
         else:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Failed: already archived.")
@@ -277,9 +237,9 @@ async def archive_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif update.message.video:
             media_id = update.message.video.file_id
 
-        if media_id in media_links:
-            media_links.remove(media_id)
-            save_media_links(media_links)
+        if media_id in media_ids:
+            media_ids.remove(media_id)
+            save_media_ids(media_ids)
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed \n[{media_id}]")
         else:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Not found \n[{media_id}]")
@@ -288,33 +248,21 @@ async def archive_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def remove_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    if user_id != admin_id:
-        username = update.effective_user.username
-        with open(access_log, "a") as f:
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [/r (remove media)] User @{username}")
+    if not is_owner(update, "/r (remove media)"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Send item to be removed.")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be removed.")
     context.user_data['remove_next'] = True
 
 
 async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if user_id != admin_id:
-        username = update.effective_user.username
-        with open(access_log, "a") as f:
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [/v (foward media)] User @{username}")
+    if not is_owner(update, "/v (view media)"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
 
-    if media_links:
-        total = len(media_links)
-        for file_id in media_links:
+    if media_ids and media_ids != []:
+        total = len(media_ids)
+        for file_id in media_ids:
             try:
                 await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id)
             except Exception as e:
@@ -322,10 +270,7 @@ async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Total: {total}")
     else:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="No media found. Send a photo or video first."
-        )
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="No media found. Send a photo or video first.")
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(bot_token).build()
@@ -333,8 +278,6 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(button_handler))
 
     app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('x', enter_shell_mode))
-    app.add_handler(CommandHandler('q', exit_shell_mode))
     app.add_handler(CommandHandler('v', forward_media))
     app.add_handler(CommandHandler('r', remove_media))
 

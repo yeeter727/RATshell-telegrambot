@@ -13,7 +13,7 @@ from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHan
 with open("tg.conf") as f:
     exec(f.read(), globals())
 
-if admin_id == 123456789:
+if owner_id == 123456789:
     print("\nIt looks like the tg.conf file has default values. \nPlease make sure to add your ID and token to tg.conf. \n")
     exit()
     
@@ -26,39 +26,34 @@ if not os.path.exists(access_log):
             "#######################"
         )
 
-# log unauthorized access
-def log_unauth(user, action):
-    with open(access_log, "a") as f:
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        f.write(f"\n[{now}] [{action}] User @{user}")
+# check if the user is the owner
+def is_owner(update, action):
+    user_id = update.effective_user.id
+    if user_id != owner_id:
+        username = update.effective_user.username
+        with open(access_log, "a") as f:
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            f.write(f"\n[{now}] [{action}] User @{username}")
+        return False
+    else:
+        return True
 
 # check if running in windows
 def in_windows():
-    return (
-        os.name == "nt"
-    )
+    return (os.name == "nt")
 win = in_windows()
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 ###########################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != admin_id:
-        username = update.effective_user.username
-        log_unauth(username, "/start")
+    if not is_owner(update, "/start"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
         return
     await update.message.reply_text(start_message)
 
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != admin_id:
-        username = update.effective_user.username
-        log_unauth(username, "Unsolicited message")
+    if not is_owner(update, "Unsolicited message"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     else:        
