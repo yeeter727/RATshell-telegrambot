@@ -22,7 +22,7 @@ This bot has been tested on **Linux**, **Windows 10/11**, and the **Android Term
 
   \
 **`shellonly-bot.py`**: This is a much smaller bot that has no buttons, does not archive media, but still maintains an access log and supports the 3 platforms listed above. \
-So it's just the shell and non-admin access logging.
+So it's just the shell and unauthorized access logging.
 
   \
 ***Optional:*** \
@@ -31,6 +31,4 @@ Reccomended command list to send to [BotFather](https://t.me/botfather):
 start - open start menu
 v - view archived media
 r - remove next media
-x - enter shell 
-q - exit shell
 ```
