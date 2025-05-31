@@ -1,6 +1,6 @@
 #!/bin/python
 # Makeshift remote shell telegram bot
-# it can also archive videos/photos sent to it (only saves TG file IDs, does not download files)
+# it can also store files sent to it and send files to the user
 
 import subprocess
 import socket
@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
-
+from telegram.constants import ChatAction
 
 ######### STARTUP #########
 # read config file
@@ -21,7 +21,7 @@ if os.path.exists("tg.conf"):
         print("It looks like the tg.conf file has default values. \nPlease make sure to add your ID and token to tg.conf.")
         exit()
 else:
-    print("Missing required tg.conf file. \nDid you download it?")
+    print("Missing required tg.conf file.")
     exit()
 
 # create access_log if not found
@@ -44,23 +44,6 @@ def is_owner(update, action):
         return False
     else:
         return True
-
-# load media IDs from the text file
-def load_media_ids():
-    if os.path.exists(media_file):
-        with open(media_file, 'r') as f:
-            return [line.strip() for line in f.readlines() if line.strip()]
-    else:
-        # create media_file if it doesnt exist
-        with open(media_file, 'w') as f:
-            pass
-        return []
-media_ids = load_media_ids()
-
-def save_media_ids(media_ids):
-    with open(media_file, 'w') as f:
-        for link in media_ids:
-            f.write(f"{link}\n")
 
 # function to check if running in termux
 def in_termux():
@@ -94,6 +77,7 @@ if win:
             fastfetch = False
     else:
         fastfetch = True
+
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 ###########################
 
@@ -204,76 +188,70 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
             else:
                 result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 output = result.stdout.decode('utf-8')
+            if not output.strip():
+                output = "No output."
             await context.bot.send_message(chat_id=update.effective_chat.id, text=output)
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
 
 
-async def archive_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_owner(update, "Sent media"):
+async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update, "/get"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
 
-    # check if the message contains a photo or video
-    if update.message and not 'remove_next' in context.user_data and (update.message.photo or update.message.video):
-        file_id = None
-        
-        # store the photo file ID
-        if update.message.photo:
-            file_id = update.message.photo[-1].file_id
-        # store the video file ID
-        elif update.message.video:
-            file_id = update.message.video.file_id
-
-        if file_id and file_id not in media_ids:
-            media_ids.append(file_id)
-
-            save_media_ids(media_ids)
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Archived \n[{file_id}]")
-        else:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Failed: already archived.")
-
-    # check if /r is active
-    elif update.message and 'remove_next' in context.user_data and context.user_data['remove_next'] and (update.message.photo or update.message.video):
-        if update.message.photo:
-            media_id = update.message.photo[-1].file_id
-        elif update.message.video:
-            media_id = update.message.video.file_id
-
-        if media_id in media_ids:
-            media_ids.remove(media_id)
-            save_media_ids(media_ids)
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed \n[{media_id}]")
-        else:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Not found \n[{media_id}]")
-        # stop waiting for media to remove
-        del context.user_data['remove_next']
-
-
-async def remove_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_owner(update, "/r (remove media)"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+    if not context.args:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Usage: /get <file_path>")
         return
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be removed.")
-    context.user_data['remove_next'] = True
 
+    file_path = " ".join(context.args)
+    if not os.path.isfile(file_path):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="File not found.")
+        return
 
-async def forward_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_owner(update, "/v (view media)"):
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
+    try:
+        await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, "rb"))
+    except Exception as e:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to get file: {e}")
+
+async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update, "Sent file"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
 
-    if media_ids and media_ids != []:
-        total = len(media_ids)
-        for file_id in media_ids:
-            try:
-                await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id)
-            except Exception as e:
-                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=file_id)
+    file_info = None
+    filename = None
 
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Total: {total}")
+    # check most file types
+    if update.message.document:
+        file_info = await context.bot.get_file(update.message.document.file_id)
+        filename = update.message.document.file_name
+    elif update.message.photo:
+        photo = update.message.photo[-1]
+        file_info = await context.bot.get_file(photo.file_id)
+        filename = f"photo_{photo.file_unique_id}.jpg"
+    elif update.message.video:
+        file_info = await context.bot.get_file(update.message.video.file_id)
+        filename = update.message.video.file_name or f"video_{update.message.video.file_unique_id}.mp4"
+    elif update.message.audio:
+        file_info = await context.bot.get_file(update.message.audio.file_id)
+        filename = update.message.audio.file_name or f"audio_{update.message.audio.file_unique_id}.mp3"
+    elif update.message.voice:
+        file_info = await context.bot.get_file(update.message.voice.file_id)
+        filename = f"voice_{update.message.voice.file_unique_id}.ogg"
+    elif update.message.animation:
+        file_info = await context.bot.get_file(update.message.animation.file_id)
+        filename = update.message.animation.file_name or f"animation_{update.message.animation.file_unique_id}.gif"
+
+    if file_info and filename:
+        save_path = os.path.join(upload_folder, filename)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        await file_info.download_to_drive(save_path)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File saved to {save_path}")
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="No media found. Send a photo or video first.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported.")
+
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(bot_token).build()
@@ -281,13 +259,12 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(button_handler))
 
     app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('v', forward_media))
-    app.add_handler(CommandHandler('r', remove_media))
+    app.add_handler(CommandHandler('get', get_file))
 
     # read messages as commands
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))
-
-    # set up handler to look for photos and videos
-    app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, archive_media))
+    
+    # read all files for upload
+    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION, handle_upload))
 
     app.run_polling()

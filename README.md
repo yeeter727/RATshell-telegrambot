@@ -1,5 +1,6 @@
 # RATshell-telegrambot
-A very simple remote access tool using the `python-telegram-bot` module to execute shell commands.
+A very simple remote access tool using the `python-telegram-bot` module to execute shell commands. \
+It also stores any file sent to it and can send files to the user with /get.
 
 <img src="src/example.png" width="400"/>
 
@@ -21,7 +22,7 @@ This bot has been tested on **Linux**, **Windows 10/11**, and the **Android Term
 *Note:* On Windows, this bot uses powershell, so all of it's aliases will work (ls, cp, mv, pwd).
 
   \
-**`shellonly-bot.py`**: This is a much smaller bot that has no buttons, does not archive media, but still maintains an access log and supports the 3 platforms listed above. \
+**`shellonly-bot.py`**: This is a much smaller bot that has no buttons, does not save files, but still maintains an access log and supports the 3 platforms listed above. \
 So it's just the shell and unauthorized access logging.
 
   \
@@ -29,6 +30,5 @@ So it's just the shell and unauthorized access logging.
 Reccomended command list to send to [BotFather](https://t.me/botfather):
 ```
 start - open start menu
-v - view archived media
-r - remove next media
+get - Usage: /get <path>
 ```
