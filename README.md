@@ -30,5 +30,5 @@ So it's just the shell and unauthorized access logging.
 Reccomended command list to send to [BotFather](https://t.me/botfather):
 ```
 start - open start menu
-get - Usage: /get <path>
+get - Usage: /get <file_path>
 ```
