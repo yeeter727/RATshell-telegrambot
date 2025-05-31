@@ -162,7 +162,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("Back", callback_data='go_back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text(text=content, reply_markup=reply_markup, parse_mode='HTML')
+        await query.edit_message_text(text=f"<code>{content}</code>", reply_markup=reply_markup, parse_mode='HTML')
 
     elif query.data == 'go_back':
         # recreate the original menu
@@ -189,7 +189,7 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
                 result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 output = result.stdout.decode('utf-8')
             if not output.strip():
-                output = "No output."
+                output = "✓"  # send a checkmark if there is no output from the command
             await context.bot.send_message(chat_id=update.effective_chat.id, text=output)
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
@@ -201,19 +201,38 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Usage: /get <file_path>")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \n\nor to get everything in a folder:\n<code>/get path/to/dir/</code>", parse_mode='HTML')
         return
 
     file_path = " ".join(context.args)
-    if not os.path.isfile(file_path):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="File not found.")
+    if os.path.isfile(file_path):
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
+        try:
+            await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, "rb"))
+        except Exception as e:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to get file: {e}")
         return
+    elif os.path.isdir(file_path):
+        file_list = [
+            os.path.join(file_path, f)
+            for f in os.listdir(file_path)
+            if os.path.isfile(os.path.join(file_path, f))
+        ]
+        if not file_list:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Directory is empty.")
+            return
 
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
-    try:
-        await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, "rb"))
-    except Exception as e:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to get file: {e}")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending <code>{len(file_list)}</code> files from directory: \n<code>{file_path}</code>", parse_mode='HTML')
+        for fpath in file_list:
+            try:
+                await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
+                await context.bot.send_document(chat_id=update.effective_chat.id, document=open(fpath, "rb"))
+            except Exception as e:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to send file {fpath}: {e}")
+        return
+    else:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="File or directory not found.")
+        return
 
 async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Sent file"):
@@ -247,10 +266,11 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if file_info and filename:
         save_path = os.path.join(upload_folder, filename)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
         await file_info.download_to_drive(save_path)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File saved to {save_path}")
+        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code>", parse_mode='HTML')
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
 
 
 if __name__ == '__main__':

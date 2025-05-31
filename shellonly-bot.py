@@ -67,7 +67,7 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
                 result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 output = result.stdout.decode('utf-8')
             if not output.strip():
-                output = "No output."
+                output = "✓"   # send a checkmark if there is no output from the command
             await context.bot.send_message(chat_id=update.effective_chat.id, text=output)
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
