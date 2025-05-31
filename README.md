@@ -2,7 +2,7 @@
 A very simple remote access tool using the `python-telegram-bot` module to execute shell commands. \
 It also stores any file sent to it and can send files to the user with /get.
 
-<img src="src/example.png" width="400"/>
+<img src="uploads/example.png" width="400"/>
 
 ### - Setup
 To run the bot directly (`python bot.py`), you'll need the `python-telegram-bot` module for all platforms:
