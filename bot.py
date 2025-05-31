@@ -1,6 +1,6 @@
 #!/bin/python
 # Makeshift remote shell telegram bot
-# it can also store files sent to it and send files to the user
+# it can also store files sent to it and can send files to the user thru /get
 
 import subprocess
 import socket
