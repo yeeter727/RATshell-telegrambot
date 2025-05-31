@@ -18,7 +18,7 @@ if os.path.exists("tg.conf"):
         exec(f.read(), globals())
     # exit if default value
     if owner_id == 123456789:
-        print("It looks like the tg.conf file has default values. \nPlease make sure to add your ID and token to tg.conf.")
+        print("\nIt looks like the tg.conf file has default values. \nPlease make sure to add your ID and token to tg.conf.\n")
         exit()
 else:
     print("Missing required tg.conf file.")
