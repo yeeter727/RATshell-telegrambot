@@ -1,6 +1,6 @@
 # RATshell-telegrambot
-A very simple remote access tool using the `python-telegram-bot` module to execute shell commands. \
-It also stores any file sent to it and can send files to the user with `/get`.
+A simple remote access tool using the `python-telegram-bot` module to execute shell commands. \
+It also stores any file sent to it and can send files to the user with `/get`. (limited to under 50MB due to TG's limits)
 
 <img src="uploads/example.png" width="400"/>
 
