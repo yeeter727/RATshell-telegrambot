@@ -73,7 +73,7 @@ if win:
             print()
             fastfetch = True
         else:
-            print("Skipping fastfetch install. 'Run Neofetch' feature will not look as expected.")
+            print("Skipping fastfetch install. 'Run Neofetch' button will not work.\n")
             fastfetch = False
     else:
         fastfetch = True
@@ -104,9 +104,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == 'run_neofetch':
         try:
-            if win and fastfetch:
-                result = subprocess.run(['fastfetch', '-l', 'none', '-s', 'title:separator:os:host:uptime:shell:cpu:memory:disk:break:separator:localip:publicip'], capture_output=True, text=True, timeout=10)
-                output = result.stdout.strip() or "No output from fastfetch.exe"
+            if win:
+                if fastfetch: 
+                    result = subprocess.run(['fastfetch', '-l', 'none', '-s', 'title:separator:os:host:uptime:shell:cpu:memory:disk:break:separator:localip:publicip'], capture_output=True, text=True, timeout=10)
+                    output = result.stdout.strip() or "No output from fastfetch.exe"
+                else:
+                    output = "fastfetch not installed."
             else:
                 result = subprocess.run(['neofetch', '--stdout'], capture_output=True, text=True, timeout=10)
                 output = result.stdout.strip() or "No output from neofetch."
