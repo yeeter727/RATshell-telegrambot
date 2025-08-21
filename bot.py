@@ -6,6 +6,7 @@ import subprocess
 import socket
 import logging
 import os
+import glob
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
@@ -208,6 +209,24 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     file_path = " ".join(context.args)
+
+    # Use glob to handle wildcards
+    if '*' in file_path or '?' in file_path or '[' in file_path:
+        file_list = glob.glob(file_path)
+        if not file_list:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="No files match that pattern.")
+            return
+
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending <code>{len(file_list)}</code> files matching: \n<code>{file_path}</code>", parse_mode='HTML')
+        for fpath in file_list:
+            if os.path.isfile(fpath):
+                try:
+                    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
+                    await context.bot.send_document(chat_id=update.effective_chat.id, document=open(fpath, "rb"))
+                except Exception as e:
+                    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to send file {fpath}: {e}")
+        return
+
     if os.path.isfile(file_path):
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
         try:
@@ -275,6 +294,11 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
 
+async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update, "Unknown bot command"):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        return
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Invalid bot command. \nTry /start or /get")
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(bot_token).build()
@@ -283,6 +307,8 @@ if __name__ == '__main__':
 
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('get', get_file))
+
+    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
     # read messages as commands
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))
