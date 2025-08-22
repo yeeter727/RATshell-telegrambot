@@ -250,7 +250,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file_entry = get_file_entry_by_filename(filename)
             sent = False
             if file_entry:
-                #msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="File found in index, sending...")
+                msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="File found in index, sending...")
                 file_id = file_entry["file_id"]
                 file_type = file_entry["file_type"]
                 try:
@@ -267,7 +267,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     elif file_type == "animation":
                         await context.bot.send_animation(chat_id=update.effective_chat.id, animation=file_id)
                     sent = True
-                    #await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg.message_id)
+                    await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg.message_id)
                 except Exception as e:
                     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
             if not sent:
