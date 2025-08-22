@@ -7,6 +7,7 @@ import socket
 import logging
 import os
 import glob
+import json
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
@@ -45,6 +46,30 @@ def is_owner(update, action):
         return False
     else:
         return True
+
+def load_index():
+    if os.path.exists(file_index):
+        with open(file_index, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_index(index):
+    with open(file_index, "w") as f:
+        json.dump(index, f, indent=2)
+
+def add_file_to_index(file_id, filename, file_type, saved_path):
+    idx = load_index()
+    idx[filename] = {
+        "file_id": file_id,
+        "file_type": file_type,
+        "saved_path": saved_path,
+        "date_saved": datetime.now().isoformat()
+    }
+    save_index(idx)
+
+def get_file_entry_by_filename(filename):
+    idx = load_index()
+    return idx.get(filename)
 
 # function to check if running in termux
 def in_termux():
@@ -209,6 +234,32 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     file_path = " ".join(context.args)
+    file_path = os.path.normpath(" ".join(context.args))
+    relative_path = os.path.relpath(file_path, upload_folder)
+    file_entry = get_file_entry_by_filename(relative_path)
+
+    if file_entry:
+        file_id = file_entry["file_id"]
+        file_type = file_entry["file_type"]
+        try:
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
+            if file_type == "document":
+                await context.bot.send_document(chat_id=update.effective_chat.id, document=file_id)
+            elif file_type == "photo":
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=file_id)
+            elif file_type == "video":
+                await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id)
+            elif file_type == "audio":
+                await context.bot.send_audio(chat_id=update.effective_chat.id, audio=file_id)
+            elif file_type == "voice":
+                await context.bot.send_voice(chat_id=update.effective_chat.id, voice=file_id)
+            elif file_type == "animation":
+                await context.bot.send_animation(chat_id=update.effective_chat.id, animation=file_id)
+            else:
+                raise Exception("Unknown file type in index")
+            return
+        except Exception as e:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending by file ID failed, trying to send the file directly. Error: {e}")
 
     # Use glob to handle wildcards
     if '*' in file_path or '?' in file_path or '[' in file_path:
@@ -263,33 +314,48 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     file_info = None
     filename = None
+    file_type = None
 
     # check most file types
     if update.message.document:
         file_info = await context.bot.get_file(update.message.document.file_id)
         filename = update.message.document.file_name
+        file_type = "document"
+        file_id = update.message.document.file_id
     elif update.message.photo:
         photo = update.message.photo[-1]
         file_info = await context.bot.get_file(photo.file_id)
         filename = f"photo_{photo.file_unique_id}.jpg"
+        file_type = "photo"
+        file_id = photo.file_id
     elif update.message.video:
         file_info = await context.bot.get_file(update.message.video.file_id)
         filename = update.message.video.file_name or f"video_{update.message.video.file_unique_id}.mp4"
+        file_type = "video"
+        file_id = update.message.video.file_id
     elif update.message.audio:
         file_info = await context.bot.get_file(update.message.audio.file_id)
         filename = update.message.audio.file_name or f"audio_{update.message.audio.file_unique_id}.mp3"
+        file_type = "audio"
+        file_id = update.message.audio.file_id
     elif update.message.voice:
         file_info = await context.bot.get_file(update.message.voice.file_id)
         filename = f"voice_{update.message.voice.file_unique_id}.ogg"
+        file_type = "voice"
+        file_id = update.message.voice.file_id
     elif update.message.animation:
         file_info = await context.bot.get_file(update.message.animation.file_id)
         filename = update.message.animation.file_name or f"animation_{update.message.animation.file_unique_id}.gif"
+        file_type = "animation"
+        file_id = update.message.animation.file_id
 
-    if file_info and filename:
+    if file_info and filename and file_id:
         save_path = os.path.join(upload_folder, filename)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
         await file_info.download_to_drive(save_path)
+        relative_path = os.path.relpath(save_path, upload_folder)
+        add_file_to_index(file_id, relative_path, file_type, save_path)
         await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code>", parse_mode='HTML')
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
