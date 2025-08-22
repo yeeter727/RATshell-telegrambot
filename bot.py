@@ -244,12 +244,12 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Directory is empty.")
             return
 
+        indexed = 0
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending <code>{len(file_list)}</code> files from directory: \n<code>{file_path}</code>", parse_mode='HTML')
         for fpath in file_list:
             filename = os.path.basename(fpath)
             file_entry = get_file_entry_by_filename(filename)
             sent = False
-            indexed = 0
             if file_entry:
                 file_id = file_entry["file_id"]
                 file_type = file_entry["file_type"]
