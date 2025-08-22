@@ -224,6 +224,36 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
 
 
+async def send_file(context, chat_id, file_entry, file_path, filename):
+    sent = False
+    if file_entry:
+        file_id = file_entry["file_id"]
+        file_type = file_entry["file_type"]
+        try:
+            if file_type == "document":
+                await context.bot.send_document(chat_id=chat_id, document=file_id)
+            elif file_type == "photo":
+                await context.bot.send_photo(chat_id=chat_id, photo=file_id)
+            elif file_type == "video":
+                await context.bot.send_video(chat_id=chat_id, video=file_id)
+            elif file_type == "audio":
+                await context.bot.send_audio(chat_id=chat_id, audio=file_id)
+            elif file_type == "voice":
+                await context.bot.send_voice(chat_id=chat_id, voice=file_id)
+            elif file_type == "animation":
+                await context.bot.send_animation(chat_id=chat_id, animation=file_id)
+            sent = True
+        except Exception as e:
+            await context.bot.send_message(chat_id=chat_id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
+    if not sent:
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
+            with open(file_path, "rb") as f:
+                await context.bot.send_document(chat_id=chat_id, document=f)
+        except Exception as e:
+            await context.bot.send_message(chat_id=chat_id, text=f"Failed to send file {filename}: {e}")
+    return sent
+
 async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/get"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
@@ -234,51 +264,27 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     file_path = os.path.normpath(" ".join(context.args))
+    chat_id = update.effective_chat.id
 
     # wildcard support
     if any(char in file_path for char in ['*', '?', '[']):
         matched_files = [f for f in glob.glob(file_path) if os.path.isfile(f)]
         if not matched_files:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="No files match that pattern.")
+            await context.bot.send_message(chat_id=chat_id, text="No files match that pattern.")
             return
 
         indexed = 0
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending <code>{len(matched_files)}</code> files matching pattern: \n<code>{file_path}</code>", parse_mode='HTML')
+        await context.bot.send_message(chat_id=chat_id, text=f"Sending <code>{len(matched_files)}</code> files matching pattern: \n<code>{file_path}</code>", parse_mode='HTML')
         for fpath in matched_files:
             filename = os.path.basename(fpath)
             file_entry = get_file_entry_by_filename(filename)
-            sent = False
-            if file_entry:
-                file_id = file_entry["file_id"]
-                file_type = file_entry["file_type"]
-                try:
-                    if file_type == "document":
-                        await context.bot.send_document(chat_id=update.effective_chat.id, document=file_id)
-                    elif file_type == "photo":
-                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=file_id)
-                    elif file_type == "video":
-                        await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id)
-                    elif file_type == "audio":
-                        await context.bot.send_audio(chat_id=update.effective_chat.id, audio=file_id)
-                    elif file_type == "voice":
-                        await context.bot.send_voice(chat_id=update.effective_chat.id, voice=file_id)
-                    elif file_type == "animation":
-                        await context.bot.send_animation(chat_id=update.effective_chat.id, animation=file_id)
-                    sent = True
-                    indexed += 1
-                except Exception as e:
-                    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
-            if not sent:
-                try:
-                    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
-                    with open(fpath, "rb") as f:
-                        await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
-                except Exception as e:
-                    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to send file {filename}: {e}")
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<code>{indexed}/{len(matched_files)}</code> files were in the index.", parse_mode='HTML')
+            sent = await send_file(context, chat_id, file_entry, fpath, filename)
+            if file_entry and sent:
+                indexed += 1
+        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(matched_files)}</code> files were in the index.", parse_mode='HTML')
         return
 
-
+    # directory support
     if os.path.isdir(file_path):
         file_list = [
             os.path.join(file_path, f)
@@ -286,82 +292,34 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if os.path.isfile(os.path.join(file_path, f))
         ]
         if not file_list:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Directory is empty.")
+            await context.bot.send_message(chat_id=chat_id, text="Directory is empty.")
             return
 
         indexed = 0
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending <code>{len(file_list)}</code> files from directory: \n<code>{file_path}</code>", parse_mode='HTML')
+        await context.bot.send_message(chat_id=chat_id, text=f"Sending <code>{len(file_list)}</code> files from directory: \n<code>{file_path}</code>", parse_mode='HTML')
         for fpath in file_list:
             filename = os.path.basename(fpath)
             file_entry = get_file_entry_by_filename(filename)
-            sent = False
-            if file_entry:
-                file_id = file_entry["file_id"]
-                file_type = file_entry["file_type"]
-                try:
-                    if file_type == "document":
-                        await context.bot.send_document(chat_id=update.effective_chat.id, document=file_id)
-                    elif file_type == "photo":
-                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=file_id)
-                    elif file_type == "video":
-                        await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id)
-                    elif file_type == "audio":
-                        await context.bot.send_audio(chat_id=update.effective_chat.id, audio=file_id)
-                    elif file_type == "voice":
-                        await context.bot.send_voice(chat_id=update.effective_chat.id, voice=file_id)
-                    elif file_type == "animation":
-                        await context.bot.send_animation(chat_id=update.effective_chat.id, animation=file_id)
-                    sent = True
-                    indexed += 1
-                except Exception as e:
-                    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
-            if not sent:
-                try:
-                    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
-                    with open(fpath, "rb") as f:
-                        await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
-                except Exception as e:
-                    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to send file {filename}: {e}")
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<code>{indexed}/{len(file_list)}</code> files were in the index.", parse_mode='HTML')
+            sent = await send_file(context, chat_id, file_entry, fpath, filename)
+            if file_entry and sent:
+                indexed += 1
+        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(file_list)}</code> files were in the index.", parse_mode='HTML')
         return
 
+    # single file support
     elif os.path.isfile(file_path):
         filename = os.path.basename(file_path)
         file_entry = get_file_entry_by_filename(filename)
-        sent = False
         if file_entry:
-            msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="File found in index, sending...")
-            file_id = file_entry["file_id"]
-            file_type = file_entry["file_type"]
-            try:
-                if file_type == "document":
-                    await context.bot.send_document(chat_id=update.effective_chat.id, document=file_id)
-                elif file_type == "photo":
-                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=file_id)
-                elif file_type == "video":
-                    await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id)
-                elif file_type == "audio":
-                    await context.bot.send_audio(chat_id=update.effective_chat.id, audio=file_id)
-                elif file_type == "voice":
-                    await context.bot.send_voice(chat_id=update.effective_chat.id, voice=file_id)
-                elif file_type == "animation":
-                    await context.bot.send_animation(chat_id=update.effective_chat.id, animation=file_id)
-                sent = True
-                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg.message_id)
-            except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending by file ID failed, sending from disk. Error: {e}")
-
-        if not sent:
-            try:
-                await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
-                with open(file_path, "rb") as f:
-                    await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
-            except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to get file: {e}")
+            msg = await context.bot.send_message(chat_id=chat_id, text="File found in index, sending...")
+            sent = await send_file(context, chat_id, file_entry, file_path, filename)
+            await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
+        else:
+            await send_file(context, chat_id, None, file_path, filename)
         return
 
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="File or directory not found.")
+        await context.bot.send_message(chat_id=chat_id, text="File or directory not found.")
         return
 
 async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
