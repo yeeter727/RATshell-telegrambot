@@ -267,7 +267,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     elif file_type == "animation":
                         await context.bot.send_animation(chat_id=update.effective_chat.id, animation=file_id)
                     sent = True
-                    await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg.message_id)
+                    #await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=msg.message_id)
                 except Exception as e:
                     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
             if not sent:
