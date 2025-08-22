@@ -327,47 +327,91 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_info = None
     filename = None
     file_type = None
+    file_id = None
+    file_size = None
 
-    # check most file types
+    # hardcoded Telegram limits with 10,000 byte spacer
+    tg_limits = {
+        "document": 52418800,   # 50MB - 10k bytes
+        "video":    52418800,
+        "audio":    52418800,
+        "animation":52418800,
+        "photo":    20961520,   # 20MB - 10k bytes
+        "voice":    52418800
+    }
+
     if update.message.document:
-        file_info = await context.bot.get_file(update.message.document.file_id)
-        filename = update.message.document.file_name
+        doc = update.message.document
+        filename = doc.file_name
         file_type = "document"
-        file_id = update.message.document.file_id
+        file_id = doc.file_id
+        file_size = doc.file_size
     elif update.message.photo:
         photo = update.message.photo[-1]
-        file_info = await context.bot.get_file(photo.file_id)
         filename = f"photo_{photo.file_unique_id}.jpg"
         file_type = "photo"
         file_id = photo.file_id
+        file_size = photo.file_size
     elif update.message.video:
-        file_info = await context.bot.get_file(update.message.video.file_id)
-        filename = update.message.video.file_name or f"video_{update.message.video.file_unique_id}.mp4"
+        video = update.message.video
+        filename = video.file_name or f"video_{video.file_unique_id}.mp4"
         file_type = "video"
-        file_id = update.message.video.file_id
+        file_id = video.file_id
+        file_size = video.file_size
     elif update.message.audio:
-        file_info = await context.bot.get_file(update.message.audio.file_id)
-        filename = update.message.audio.file_name or f"audio_{update.message.audio.file_unique_id}.mp3"
+        audio = update.message.audio
+        filename = audio.file_name or f"audio_{audio.file_unique_id}.mp3"
         file_type = "audio"
-        file_id = update.message.audio.file_id
+        file_id = audio.file_id
+        file_size = audio.file_size
     elif update.message.voice:
-        file_info = await context.bot.get_file(update.message.voice.file_id)
-        filename = f"voice_{update.message.voice.file_unique_id}.ogg"
+        voice = update.message.voice
+        filename = f"voice_{voice.file_unique_id}.ogg"
         file_type = "voice"
-        file_id = update.message.voice.file_id
+        file_id = voice.file_id
+        file_size = voice.file_size
     elif update.message.animation:
-        file_info = await context.bot.get_file(update.message.animation.file_id)
-        filename = update.message.animation.file_name or f"animation_{update.message.animation.file_unique_id}.gif"
+        anim = update.message.animation
+        filename = anim.file_name or f"animation_{anim.file_unique_id}.gif"
         file_type = "animation"
-        file_id = update.message.animation.file_id
+        file_id = anim.file_id
+        file_size = anim.file_size
 
-    if file_info and filename and file_id:
+    if filename and file_id and file_type and file_size is not None:
+        upload_limit = tg_limits[file_type]
+        if file_size > upload_limit:
+            # too large for Telegram bot upload, create .tglink placeholder
+            save_path = os.path.join(upload_folder, f"{filename}.tglink")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            placeholder = {
+                "file_type": file_type,
+                "file_size": file_size,
+                "telegram_limit_bytes": upload_limit,
+                "note": "File size exceeds Telegram bot upload limit. This placeholder is necessary for the file to be sent properly."
+            }
+            with open(save_path, "w") as f:
+                json.dump(placeholder, f, indent=2)
+            add_file_to_index(file_id, f"{filename}.tglink", file_type, save_path)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"File is too large for Telegram bot upload. Indexed and placeholder created:\n<code>{save_path}</code>",
+                parse_mode='HTML'
+            )
+            return
+
+        # Only call get_file if file is within allowed size
+        file_info = await context.bot.get_file(file_id)
         save_path = os.path.join(upload_folder, filename)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
         await file_info.download_to_drive(save_path)
         add_file_to_index(file_id, filename, file_type, save_path)
-        await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code>", parse_mode='HTML')
+        await context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=msg.message_id,
+            text=f"File saved: \n<code>{save_path}</code>",
+            parse_mode='HTML'
+        )
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
 
