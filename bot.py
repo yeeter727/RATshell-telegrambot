@@ -277,7 +277,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
                 except Exception as e:
                     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to send file {filename}: {e}")
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<code>{indexed}/{len(file_list)}</code> files were already indexed.", parse_mode='HTML')
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"{indexed} files were already indexed.", parse_mode='HTML')
         return
 
     elif os.path.isfile(file_path):
