@@ -7,6 +7,7 @@ import socket
 import logging
 import os
 import json
+import glob
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
@@ -233,6 +234,50 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     file_path = os.path.normpath(" ".join(context.args))
+
+    # wildcard support
+    if any(char in file_path for char in ['*', '?', '[']):
+        matched_files = [f for f in glob.glob(file_path) if os.path.isfile(f)]
+        if not matched_files:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="No files match that pattern.")
+            return
+
+        indexed = 0
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending <code>{len(matched_files)}</code> files matching pattern: \n<code>{file_path}</code>", parse_mode='HTML')
+        for fpath in matched_files:
+            filename = os.path.basename(fpath)
+            file_entry = get_file_entry_by_filename(filename)
+            sent = False
+            if file_entry:
+                file_id = file_entry["file_id"]
+                file_type = file_entry["file_type"]
+                try:
+                    if file_type == "document":
+                        await context.bot.send_document(chat_id=update.effective_chat.id, document=file_id)
+                    elif file_type == "photo":
+                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=file_id)
+                    elif file_type == "video":
+                        await context.bot.send_video(chat_id=update.effective_chat.id, video=file_id)
+                    elif file_type == "audio":
+                        await context.bot.send_audio(chat_id=update.effective_chat.id, audio=file_id)
+                    elif file_type == "voice":
+                        await context.bot.send_voice(chat_id=update.effective_chat.id, voice=file_id)
+                    elif file_type == "animation":
+                        await context.bot.send_animation(chat_id=update.effective_chat.id, animation=file_id)
+                    sent = True
+                    indexed += 1
+                except Exception as e:
+                    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
+            if not sent:
+                try:
+                    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_DOCUMENT)
+                    with open(fpath, "rb") as f:
+                        await context.bot.send_document(chat_id=update.effective_chat.id, document=f)
+                except Exception as e:
+                    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Failed to send file {filename}: {e}")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<code>{indexed}/{len(matched_files)}</code> files were in the index.", parse_mode='HTML')
+        return
+
 
     if os.path.isdir(file_path):
         file_list = [
