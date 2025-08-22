@@ -260,10 +260,10 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \n\nor to get everything in a folder:\n<code>/get path/to/dir/</code>", parse_mode='HTML')
-        return
-
-    file_path = os.path.normpath(" ".join(context.args))
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \n\nor to get everything in a folder:\n<code>/get path/to/dir/</code> \n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
+        file_path = os.path.normpath(upload_folder)
+    else:
+        file_path = os.path.normpath(" ".join(context.args))
     chat_id = update.effective_chat.id
 
     # wildcard support
@@ -336,7 +336,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # hardcoded Telegram limits with 10,000 byte spacer
     tg_limits = {
         "document": 52418800,   # 50MB - 10k bytes
-        "video":    52418800,
+        "video":    32418800,
         "audio":    52418800,
         "animation":52418800,
         "photo":    20961520,   # 20MB - 10k bytes
