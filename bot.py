@@ -336,7 +336,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # hardcoded Telegram limits with 10,000 byte spacer
     tg_limits = {
         "document": 52418800,   # 50MB - 10k bytes
-        "video":    32418800,
+        "video":    52418800,
         "audio":    52418800,
         "animation":52418800,
         "photo":    20961520,   # 20MB - 10k bytes
@@ -395,32 +395,29 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with open(save_path, "w") as f:
                 json.dump(placeholder, f, indent=2)
             add_file_to_index(file_id, f"{filename}.tglink", file_type, save_path)
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"File is too large for Telegram bot upload. Indexed and placeholder created:\n<code>{save_path}</code>",
-                parse_mode='HTML'
-            )
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File is too large for Telegram bot upload. Indexed and placeholder created:\n<code>{save_path}</code>", parse_mode='HTML')
             return
 
         # report error if file is still too large
         try: 
             file_info = await context.bot.get_file(file_id)
+            save_path = os.path.join(upload_folder, filename)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
+            await file_info.download_to_drive(save_path)
+            add_file_to_index(file_id, filename, file_type, save_path)
+            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code>", parse_mode='HTML')
         except Exception as e:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
-            return
-        save_path = os.path.join(upload_folder, filename)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
-        await file_info.download_to_drive(save_path)
-        add_file_to_index(file_id, filename, file_type, save_path)
-        await context.bot.edit_message_text(
-            chat_id=update.effective_chat.id,
-            message_id=msg.message_id,
-            text=f"File saved: \n<code>{save_path}</code>",
-            parse_mode='HTML'
-        )
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n{str(e)}")
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
+
+async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update, "/remove"):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        return
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be removed.")
+    context.user_data['remove_next'] = True
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unknown bot command"):
@@ -435,6 +432,7 @@ if __name__ == '__main__':
 
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('get', get_file))
+    app.add_handler(CommandHandler('remove', remove_file))
 
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
