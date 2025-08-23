@@ -402,8 +402,12 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Only call get_file if file is within allowed size
-        file_info = await context.bot.get_file(file_id)
+        # report error if file is still too large
+        try: 
+            file_info = await context.bot.get_file(file_id)
+        except Exception as e:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
+            return
         save_path = os.path.join(upload_folder, filename)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
