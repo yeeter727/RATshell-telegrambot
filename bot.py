@@ -452,6 +452,7 @@ async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args == "c":
         await context.bot.send_message(chat_id=update.effective_chat.id, text="File removal canceled.")
         context.user_data['remove_next'] = False
+        return
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be deleted from index and disk.")
     context.user_data['remove_next'] = True
 
