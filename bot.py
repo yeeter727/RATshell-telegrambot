@@ -382,7 +382,6 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if 'remove_next' in context.user_data and context.user_data['remove_next']:
         idx = load_index()
-        removed = False
 
         # remove by file ID first
         to_remove = None
@@ -396,10 +395,9 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 if os.path.exists(entry["saved_path"]):
                     os.remove(entry["saved_path"])
-                removed = True
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{to_remove}</code> removed from index and disk (by file ID).", parse_mode='HTML')
             except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed from index, but failed to delete file: {e}")
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File '{to_remove}' removed from index and disk (by file ID).")
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed from index, but failed to delete file: \n{e}")
         # fall back to filename if not found by file ID
         elif filename and filename in idx:
             entry = idx.pop(filename)
@@ -407,10 +405,9 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 if os.path.exists(entry["saved_path"]):
                     os.remove(entry["saved_path"])
-                removed = True
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{filename}</code> removed from index and disk (by filename).", parse_mode='HTML')
             except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed from index, but failed to delete file: {e}")
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File '{filename}' removed from index and disk (by filename).")
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed from index, but failed to delete file: \n{e}")
         else:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="File not found in index (by file ID or filename).")
 
@@ -452,6 +449,9 @@ async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/remove"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
+    if 'remove_next' in context.user_data and context.user_data['remove_next'] and context.args == "-c":
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="File removal canceled.")
+        context.user_data['remove_next'] = False
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be deleted from index and disk.")
     context.user_data['remove_next'] = True
 
