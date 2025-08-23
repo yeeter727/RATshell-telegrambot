@@ -1,6 +1,7 @@
 # RATshell-telegrambot
 A simple remote access tool using the `python-telegram-bot` module to execute shell commands. \
-It also stores any file sent to it and can send files to the user with `/get`. (limited to under 50MB due to TG's limits)
+It also stores any file sent to it and can send files to the user with `/get`. 
+With files that exceed the bot upload limit (~50MB), it saves the file ID so they can still be retrieved with `/get`
 
 <img src="uploads/example.png" width="400"/>
 
@@ -31,4 +32,5 @@ Reccomended command list to send to [BotFather](https://t.me/botfather):
 ```
 start - open start menu
 get - Usage: /get <file_or_dir_path>
+remove - remove next forwarded item from index and disk
 ```
