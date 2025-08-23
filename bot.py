@@ -380,7 +380,43 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_id = anim.file_id
         file_size = anim.file_size
 
-    if filename and file_id and file_type and file_size is not None:
+    if 'remove_next' in context.user_data and context.user_data['remove_next']:
+        idx = load_index()
+        removed = False
+
+        # remove by file ID first
+        to_remove = None
+        for fname, entry in idx.items():
+            if entry.get("file_id") == file_id:
+                to_remove = fname
+                break
+        if to_remove:
+            entry = idx.pop(to_remove)
+            save_index(idx)
+            try:
+                if os.path.exists(entry["saved_path"]):
+                    os.remove(entry["saved_path"])
+                removed = True
+            except Exception as e:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed from index, but failed to delete file: {e}")
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File '{to_remove}' removed from index and disk (by file ID).")
+        # fall back to filename if not found by file ID
+        elif filename and filename in idx:
+            entry = idx.pop(filename)
+            save_index(idx)
+            try:
+                if os.path.exists(entry["saved_path"]):
+                    os.remove(entry["saved_path"])
+                removed = True
+            except Exception as e:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed from index, but failed to delete file: {e}")
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File '{filename}' removed from index and disk (by filename).")
+        else:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="File not found in index (by file ID or filename).")
+
+        context.user_data['remove_next'] = False
+        return
+    elif filename and file_id and file_type and file_size is not None:
         upload_limit = tg_limits[file_type]
         if file_size > upload_limit:
             # too large for Telegram bot upload, create .tglink placeholder
@@ -416,7 +452,7 @@ async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/remove"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be removed.")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be deleted from index and disk.")
     context.user_data['remove_next'] = True
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
