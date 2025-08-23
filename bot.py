@@ -449,7 +449,7 @@ async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/remove"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
-    if 'remove_next' in context.user_data and context.user_data['remove_next'] and context.args == "-c":
+    if context.args == "-c":
         await context.bot.send_message(chat_id=update.effective_chat.id, text="File removal canceled.")
         context.user_data['remove_next'] = False
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be deleted from index and disk.")
