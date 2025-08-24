@@ -26,6 +26,11 @@ else:
     print("Missing required tg.conf file.")
     exit()
 
+try:
+    bot_download_limit
+except NameError:
+    bot_download_limit = 20970496
+
 # create access_log if not found
 if not os.path.exists(access_log):
     with open(access_log, 'w') as f:
@@ -333,16 +338,6 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_id = None
     file_size = None
 
-    # hardcoded Telegram limits with 10,000 byte spacer
-    tg_limits = {
-        "document": 52418800,   # 50MB - 10k bytes
-        "video":    52418800,
-        "audio":    52418800,
-        "animation":52418800,
-        "photo":    20961520,   # 20MB - 10k bytes
-        "voice":    52418800
-    }
-
     if update.message.photo:
         photo = update.message.photo[-1]
         filename = f"photo_{photo.file_unique_id}.jpg"
@@ -414,23 +409,22 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['remove_next'] = False
         return
     elif filename and file_id and file_type and file_size is not None:
-        upload_limit = tg_limits[file_type]
         file_size_MB = round(file_size / 1000000, 2)
-        upload_limit_MB = round(upload_limit / 1000000, 2)
-        if file_size > upload_limit:
-            # too large for Telegram bot upload, create .tglink placeholder
+        download_limit_MB = round(download_limit / 1000000, 2)
+        if file_size > download_limit:
+            # too large for Telegram bot download, create .tglink placeholder
             save_path = os.path.join(upload_folder, f"{filename}.tglink")
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             placeholder = {
                 "file_type": file_type,
                 "file_size_MB": file_size_MB,
-                "telegram_limit_MB": upload_limit_MB,
-                "note": "File size exceeds Telegram bot upload limit. This placeholder is necessary for the file to be sent properly."
+                "telegram_limit_MB": download_limit_MB,
+                "note": "File size exceeds Telegram bot download limit. This placeholder is necessary for the file to be sent properly."
             }
             with open(save_path, "w") as f:
                 json.dump(placeholder, f, indent=2)
             add_file_to_index(file_id, f"{filename}.tglink", file_type, save_path)
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File is too large for Telegram bot upload. Indexed and placeholder created:\n<code>{save_path}</code>", parse_mode='HTML')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File is too large for Telegram bot download. Indexed and placeholder created:\n<code>{save_path}</code>", parse_mode='HTML')
             return
 
         # report error if file is still too large
@@ -443,7 +437,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             add_file_to_index(file_id, filename, file_type, save_path)
             await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code> \nType: {file_type}", parse_mode='HTML')
         except Exception as e:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n{str(e)} \n\nFile type: {file_type} \nUpload limit: {upload_limit_MB}MB \nFile size: {file_size_MB} \nFile info: {file_info}")
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n<code>{str(e)}</code> \n\nFile type: {file_type} \nDownload limit: {download_limit_MB}MB \nFile size: {file_size_MB}MB \nFile info: {file_info}")
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
 
