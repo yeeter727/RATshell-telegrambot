@@ -409,7 +409,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     elif filename and file_id and file_type and file_size is not None:
         if filename in idx:
-            if filename.get("file_id") == file_id:
+            if idx[filename].get("file_id") == file_id:
                 await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{filename}</code> was already in the index.", parse_mode='HTML')
                 return
             else:
