@@ -375,8 +375,8 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_id = doc.file_id
         file_size = doc.file_size
 
+    idx = load_index()
     if 'remove_next' in context.user_data and context.user_data['remove_next']:
-        idx = load_index()
         # remove by file ID first
         to_remove = None
         for fname, entry in idx.items():
@@ -408,6 +408,12 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['remove_next'] = False
         return
     elif filename and file_id and file_type and file_size is not None:
+        if filename in idx:
+            if filename.get("file_id") == file_id:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{filename}</code> was already in the index.", parse_mode='HTML')
+                return
+            else:
+                filename = f"{anim.file_unique_id}_{filename}"
         file_size_MB = round(file_size / 1000000, 2)
         download_limit_MB = round(bot_download_limit / 1000000, 2)
         if file_size > bot_download_limit:
