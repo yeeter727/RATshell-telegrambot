@@ -375,7 +375,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_size = voice.file_size
     elif update.message.animation:
         anim = update.message.animation
-        filename = anim.file_name or f"animation_{anim.file_unique_id}.gif"
+        filename = f"animation_{anim.file_unique_id}.gif"
         file_type = "animation"
         file_id = anim.file_id
         file_size = anim.file_size
@@ -480,3 +480,4 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION, handle_upload))
 
     app.run_polling()
+
