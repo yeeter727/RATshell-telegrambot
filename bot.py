@@ -415,10 +415,13 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_path = os.path.join(upload_folder, f"{filename}.tglink")
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             placeholder = {
+                "orig_filename": filename,
+                "file_id": file_id,
                 "file_type": file_type,
-                "file_size_MB": file_size_MB,
-                "telegram_limit_MB": download_limit_MB,
-                "note": "File size exceeds Telegram bot download limit. This placeholder is necessary for the file to be sent properly."
+                "file_size": str(file_size_MB) + "MB",
+                "download_limit": str(download_limit_MB) + "MB",
+                "date_saved": datetime.now().isoformat(),
+                "note": "File size exceeds Telegram bot download limit. This placeholder is necessary for the file to be sent properly. \nData in this file is for your reference, as it is nearly a copy of the index entry."
             }
             with open(save_path, "w") as f:
                 json.dump(placeholder, f, indent=2)
