@@ -343,13 +343,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "voice":    52418800
     }
 
-    if update.message.document:
-        doc = update.message.document
-        filename = doc.file_name
-        file_type = "document"
-        file_id = doc.file_id
-        file_size = doc.file_size
-    elif update.message.photo:
+    if update.message.photo:
         photo = update.message.photo[-1]
         filename = f"photo_{photo.file_unique_id}.jpg"
         file_type = "photo"
@@ -379,6 +373,12 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_type = "animation"
         file_id = anim.file_id
         file_size = anim.file_size
+    elif update.message.document:
+        doc = update.message.document
+        filename = doc.file_name
+        file_type = "document"
+        file_id = doc.file_id
+        file_size = doc.file_size
 
     if 'remove_next' in context.user_data and context.user_data['remove_next']:
         idx = load_index()
@@ -415,14 +415,16 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     elif filename and file_id and file_type and file_size is not None:
         upload_limit = tg_limits[file_type]
+        file_size_MB = round(file_size / 1000000, 2)
+        upload_limit_MB = round(upload_limit / 1000000, 2)
         if file_size > upload_limit:
             # too large for Telegram bot upload, create .tglink placeholder
             save_path = os.path.join(upload_folder, f"{filename}.tglink")
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             placeholder = {
                 "file_type": file_type,
-                "file_size": file_size,
-                "telegram_limit_bytes": upload_limit,
+                "file_size_MB": file_size_MB,
+                "telegram_limit_MB": upload_limit_MB,
                 "note": "File size exceeds Telegram bot upload limit. This placeholder is necessary for the file to be sent properly."
             }
             with open(save_path, "w") as f:
@@ -441,7 +443,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             add_file_to_index(file_id, filename, file_type, save_path)
             await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code>", parse_mode='HTML')
         except Exception as e:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n{str(e)}")
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n{str(e)} \n\nFile type: {file_type} \nUpload limit: {upload_limit_MB}MB \nFile size: {file_size_MB} \nFile info: {file_info}")
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
 
