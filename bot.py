@@ -408,7 +408,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['remove_next'] = False
         return
     elif filename and file_id and file_type and file_size is not None:
-        if filename in idx:
+        if filename in idx or any(entry["file_id"] == file_id for entry in idx.values()):
             if idx[filename].get("file_id") == file_id:
                 await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{filename}</code> was already in the index.", parse_mode='HTML')
                 return
@@ -427,7 +427,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "file_size": str(file_size_MB) + "MB",
                 "download_limit": str(download_limit_MB) + "MB",
                 "date_saved": datetime.now().isoformat(),
-                "note": "File size exceeds Telegram bot download limit. This placeholder is necessary for the file to be sent properly. \nData in this file is for your reference, as it is nearly a copy of the index entry."
+                "note": "File size exceeds Telegram bot download limit. This placeholder is necessary for the file to be sent properly. Data in this file is for your reference, as it is nearly a copy of the index entry."
             }
             with open(save_path, "w") as f:
                 json.dump(placeholder, f, indent=2)
