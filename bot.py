@@ -362,36 +362,42 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_type = "photo"
         file_id = photo.file_id
         file_size = photo.file_size
+        file_unique_id = photo.file_unique_id
     elif update.message.video:
         video = update.message.video
         filename = video.file_name or f"video_{video.file_unique_id}.mp4"
         file_type = "video"
         file_id = video.file_id
         file_size = video.file_size
+        file_unique_id = video.file_unique_id
     elif update.message.audio:
         audio = update.message.audio
         filename = audio.file_name or f"audio_{audio.file_unique_id}.mp3"
         file_type = "audio"
         file_id = audio.file_id
         file_size = audio.file_size
+        file_unique_id = audio.file_unique_id
     elif update.message.voice:
         voice = update.message.voice
         filename = f"voice_{voice.file_unique_id}.ogg"
         file_type = "voice"
         file_id = voice.file_id
         file_size = voice.file_size
+        file_unique_id = voice.file_unique_id
     elif update.message.animation:
         anim = update.message.animation
         filename = anim.file_name or f"animation_{anim.file_unique_id}.gif"
         file_type = "animation"
         file_id = anim.file_id
         file_size = anim.file_size
+        file_unique_id = anim.file_unique_id
     elif update.message.document:
         doc = update.message.document
         filename = doc.file_name
         file_type = "document"
         file_id = doc.file_id
         file_size = doc.file_size
+        file_unique_id = doc.file_unique_id
 
     idx = load_index()
     if 'remove_next' in context.user_data and context.user_data['remove_next']:
@@ -432,7 +438,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             else:
                 filename = normalize_filename(filename)
-                filename = f"{doc.file_unique_id}_{filename}"
+                filename = f"{file_unique_id}_{filename}"
         file_size_MB = round(file_size / 1000000, 2)
         download_limit_MB = round(bot_download_limit / 1000000, 2)
         filename = normalize_filename(filename)
@@ -441,7 +447,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_path = os.path.join(upload_folder, f"{filename}.tglink")
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             placeholder = {
-                "orig_filename": filename,
+                "filename": filename,
                 "file_id": file_id,
                 "file_type": file_type,
                 "file_size": str(file_size_MB) + "MB",
