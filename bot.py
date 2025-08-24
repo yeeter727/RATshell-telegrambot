@@ -8,6 +8,8 @@ import logging
 import os
 import json
 import glob
+import unicodedata
+import re
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
@@ -75,6 +77,22 @@ def add_file_to_index(file_id, filename, file_type, saved_path):
 def get_file_entry_by_filename(filename):
     idx = load_index()
     return idx.get(filename)
+
+def normalize_filename(filename: str, max_length: int = 255) -> str:
+    filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')     # Normalize Unicode characters (e.g., smart quotes, accents)    
+    filename = ''.join(c for c in filename if c.isprintable())                                       # Remove control characters and problematic Unicode remnants
+    filename = re.sub(r'[\s\-]+', '_', filename)                                                     # Replace spaces and repeated dashes/underscores with a single underscore
+    filename = re.sub(rf'[^\w{re.escape("._-")}]', '', filename)                                     # Remove characters that are generally unsafe in filenames
+    filename = filename.strip("._")                                                                  # Remove leading/trailing underscores or dots
+
+    # Enforce maximum filename length
+    if len(filename) > max_length:
+        name, ext = os.path.splitext(filename)
+        filename = name[:max_length - len(ext)] + ext
+
+    # Fallback if filename is empty after cleanup
+    return filename or "file"
+
 
 # function to check if running in termux
 def in_termux():
@@ -413,9 +431,11 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{filename}</code> was already in the index.", parse_mode='HTML')
                 return
             else:
-                filename = f"{anim.file_unique_id}_{filename}"
+                filename = normalize_filename(filename)
+                filename = f"{doc.file_unique_id}_{filename}"
         file_size_MB = round(file_size / 1000000, 2)
         download_limit_MB = round(bot_download_limit / 1000000, 2)
+        filename = normalize_filename(filename)
         if file_size > bot_download_limit:
             # too large for Telegram bot download, create .tglink placeholder
             save_path = os.path.join(upload_folder, f"{filename}.tglink")
