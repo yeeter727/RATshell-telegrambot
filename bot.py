@@ -377,7 +377,6 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if 'remove_next' in context.user_data and context.user_data['remove_next']:
         idx = load_index()
-
         # remove by file ID first
         to_remove = None
         for fname, entry in idx.items():
@@ -410,8 +409,8 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     elif filename and file_id and file_type and file_size is not None:
         file_size_MB = round(file_size / 1000000, 2)
-        download_limit_MB = round(download_limit / 1000000, 2)
-        if file_size > download_limit:
+        download_limit_MB = round(bot_download_limit / 1000000, 2)
+        if file_size > bot_download_limit:
             # too large for Telegram bot download, create .tglink placeholder
             save_path = os.path.join(upload_folder, f"{filename}.tglink")
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
