@@ -369,7 +369,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_size = voice.file_size
     elif update.message.animation:
         anim = update.message.animation
-        filename = f"animation_{anim.file_unique_id}.gif"
+        filename = anim.file_name or f"animation_{anim.file_unique_id}.gif"
         file_type = "animation"
         file_id = anim.file_id
         file_size = anim.file_size
@@ -441,7 +441,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
             await file_info.download_to_drive(save_path)
             add_file_to_index(file_id, filename, file_type, save_path)
-            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code>", parse_mode='HTML')
+            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code> \nType: {file_type}", parse_mode='HTML')
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n{str(e)} \n\nFile type: {file_type} \nUpload limit: {upload_limit_MB}MB \nFile size: {file_size_MB} \nFile info: {file_info}")
     else:
@@ -482,4 +482,3 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION, handle_upload))
 
     app.run_polling()
-
