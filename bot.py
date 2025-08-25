@@ -431,6 +431,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data['remove_next'] = False
         return
+
     elif filename and file_id and file_type and file_size is not None:
         if filename in idx or any(entry["file_id"] == file_id for entry in idx.values()):
             if any(entry["file_id"] == file_id for entry in idx.values()):
