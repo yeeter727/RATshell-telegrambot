@@ -404,7 +404,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_unique_id = voice.file_unique_id
     elif update.message.animation:
         anim = update.message.animation
-        filename = anim.file_name or f"animation_{anim.file_unique_id}.gif"
+        filename = anim.file_name or f"animation_{anim.file_unique_id}.mp4"
         file_type = "animation"
         file_id = anim.file_id
         file_size = anim.file_size
