@@ -303,7 +303,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = os.path.normpath(upload_folder)
     elif context.args[0] and context.args[0] == "-t":
         if len(context.args) < 2:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Specify a file type: \n<code>/get -t video</code> \n\nAll file types: \n<code>photo, video, audio, voice, document, animation</code>", parse_mode='HTML')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Specify a file type: \n<code>/get -t video</code> \n\nAll file types: \n<code>photo, video, audio, voice, document, animation, sticker</code>", parse_mode='HTML')
             return
         query_type = context.args[1]
         idx = load_index()
