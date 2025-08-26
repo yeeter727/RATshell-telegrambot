@@ -225,7 +225,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=start_message, reply_markup=reply_markup)
 
-
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unsolicited message"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
@@ -245,7 +244,6 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
 
-
 async def send_file(context, chat_id, file_entry, file_path, filename):
     sent = False
     if file_entry:
@@ -264,14 +262,42 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
                 await context.bot.send_voice(chat_id=chat_id, voice=file_id)
             elif file_type == "animation":
                 await context.bot.send_animation(chat_id=chat_id, animation=file_id)
+            elif file_type == "sticker":
+                await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
             sent = True
         except Exception as e:
             await context.bot.send_message(chat_id=chat_id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
     if not sent:
         try:
-            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
+            # set the correct chat action for each type
+            chat_actions = {
+                "photo": ChatAction.UPLOAD_PHOTO,
+                "video": ChatAction.UPLOAD_VIDEO,
+                "audio": ChatAction.UPLOAD_AUDIO,
+                "voice": ChatAction.UPLOAD_VOICE,
+                "animation": ChatAction.UPLOAD_DOCUMENT,
+                "sticker": ChatAction.UPLOAD_DOCUMENT,
+                "document": ChatAction.UPLOAD_DOCUMENT,
+            }
+            await context.bot.send_chat_action(chat_id=chat_id, action=chat_actions.get(file_entry["file_type"] if file_entry else "document", ChatAction.UPLOAD_DOCUMENT))
             with open(file_path, "rb") as f:
-                await context.bot.send_document(chat_id=chat_id, document=f)
+                if file_entry:
+                    if file_type == "photo":
+                        await context.bot.send_photo(chat_id=chat_id, photo=f)
+                    elif file_type == "video":
+                        await context.bot.send_video(chat_id=chat_id, video=f)
+                    elif file_type == "audio":
+                        await context.bot.send_audio(chat_id=chat_id, audio=f)
+                    elif file_type == "voice":
+                        await context.bot.send_voice(chat_id=chat_id, voice=f)
+                    elif file_type == "animation":
+                        await context.bot.send_animation(chat_id=chat_id, animation=f)
+                    elif file_type == "sticker":
+                        await context.bot.send_sticker(chat_id=chat_id, sticker=f)
+                    else:
+                        await context.bot.send_document(chat_id=chat_id, document=f)
+                else:
+                    await context.bot.send_document(chat_id=chat_id, document=f)
         except Exception as e:
             await context.bot.send_message(chat_id=chat_id, text=f"Failed to send file {filename}: {e}")
     return sent
@@ -409,6 +435,18 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_id = anim.file_id
         file_size = anim.file_size
         file_unique_id = anim.file_unique_id
+    elif update.message.sticker:
+        sticker = update.message.sticker
+        if getattr(sticker, "is_video", False):
+            filename = f"sticker_{sticker.file_unique_id}.webm"
+        elif sticker.is_animated:
+            filename = f"sticker_{sticker.file_unique_id}.tgs"
+        else:
+            filename = f"sticker_{sticker.file_unique_id}.webp"
+        file_type = "sticker"
+        file_id = sticker.file_id
+        file_size = sticker.file_size
+        file_unique_id = sticker.file_unique_id
     elif update.message.document:
         doc = update.message.document
         filename = doc.file_name
@@ -526,6 +564,6 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))
     
     # read all files for upload
-    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION, handle_upload))
+    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, handle_upload))
 
     app.run_polling()
