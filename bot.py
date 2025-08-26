@@ -93,7 +93,6 @@ def normalize_filename(filename: str, max_length: int = 255) -> str:
     # Fallback if filename is empty after cleanup
     return filename or "file"
 
-
 # function to check if running in termux
 def in_termux():
     prefix = os.environ.get("PREFIX")
@@ -282,12 +281,31 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
 
+    chat_id = update.effective_chat.id
     if not context.args:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \n\nor to get everything in a folder:\n<code>/get path/to/dir/</code> \n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
         file_path = os.path.normpath(upload_folder)
+    elif context.args[0] and context.args[0] == "-t":
+        if len(context.args) < 2:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Specify a file type: \n<code>/get -t video</code> \n\nAll file types: \n<code>photo, video, audio, voice, document, animation</code>", parse_mode='HTML')
+            return
+        query_type = context.args[1]
+        idx = load_index()
+        sent_num = 0
+        for fname, entry in idx.items():
+            if entry.get("file_type") == query_type:
+                file_entry = get_file_entry_by_filename(fname)
+                fpath =  file_entry["saved_path"]
+                sent = await send_file(context, chat_id, file_entry, fpath, fname)
+                if file_entry and sent:
+                    sent_num += 1
+        if sent_num > 0:
+            await context.bot.send_message(chat_id=chat_id, text=f"Sent <code>{sent_num}</code> files by type: <code>{query_type}</code>", parse_mode='HTML')
+        else:
+            await context.bot.send_message(chat_id=chat_id, text=f"No files by type <code>{query_type}</code> were found in the index.", parse_mode='HTML')
+            return
     else:
         file_path = os.path.normpath(" ".join(context.args))
-    chat_id = update.effective_chat.id
 
     # wildcard support
     if any(char in file_path for char in ['*', '?', '[']):
@@ -304,7 +322,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sent = await send_file(context, chat_id, file_entry, fpath, filename)
             if file_entry and sent:
                 indexed += 1
-        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(matched_files)}</code> files were in the index.", parse_mode='HTML')
+        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(matched_files)}</code> files were in the upload index.", parse_mode='HTML')
         return
 
     # directory support
@@ -326,7 +344,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sent = await send_file(context, chat_id, file_entry, fpath, filename)
             if file_entry and sent:
                 indexed += 1
-        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(file_list)}</code> files were in the index.", parse_mode='HTML')
+        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(file_list)}</code> files were in the upload index.", parse_mode='HTML')
         return
 
     # single file support
@@ -470,7 +488,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
             await file_info.download_to_drive(save_path)
             add_file_to_index(file_id, filename, file_type, save_path)
-            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"File saved: \n<code>{save_path}</code> \nType: {file_type}", parse_mode='HTML')
+            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"{file_type.capitalize()} saved: \n<code>{save_path}</code>", parse_mode='HTML')
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n<code>{str(e)}</code> \n\nFile type: {file_type} \nDownload limit: {download_limit_MB}MB \nFile size: {file_size_MB}MB \nFile info: {file_info}")
     else:
