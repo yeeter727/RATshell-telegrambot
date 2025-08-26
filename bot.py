@@ -269,17 +269,7 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
             await context.bot.send_message(chat_id=chat_id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
     if not sent:
         try:
-            # set the correct chat action for each type
-            chat_actions = {
-                "photo": ChatAction.UPLOAD_PHOTO,
-                "video": ChatAction.UPLOAD_VIDEO,
-                "audio": ChatAction.UPLOAD_AUDIO,
-                "voice": ChatAction.UPLOAD_VOICE,
-                "animation": ChatAction.UPLOAD_DOCUMENT,
-                "sticker": ChatAction.UPLOAD_DOCUMENT,
-                "document": ChatAction.UPLOAD_DOCUMENT,
-            }
-            await context.bot.send_chat_action(chat_id=chat_id, action=chat_actions.get(file_entry["file_type"] if file_entry else "document", ChatAction.UPLOAD_DOCUMENT))
+            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
             with open(file_path, "rb") as f:
                 if file_entry:
                     if file_type == "photo":
