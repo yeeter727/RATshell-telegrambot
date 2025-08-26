@@ -31,6 +31,6 @@ So it's just the shell and unauthorized access logging.
 Reccomended command list to send to [BotFather](https://t.me/botfather):
 ```
 start - open start menu
-get - Usage: /get <file_or_dir_path> | /get -t <file_type>
+get - /get <file_or_dir_path> • /get -t <file_type>
 remove - remove next forwarded item from index and disk
 ```
