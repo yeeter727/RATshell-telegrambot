@@ -64,11 +64,12 @@ def save_index(index):
     with open(file_index, "w") as f:
         json.dump(index, f, indent=2)
 
-def add_file_to_index(file_id, filename, file_type, saved_path):
+def add_file_to_index(file_id, filename, file_type, saved_path, file_size_MB):
     idx = load_index()
     idx[filename] = {
         "file_id": file_id,
         "file_type": file_type,
+        "file_size": f"{file_size_MB}MB",
         "saved_path": saved_path,
         "date_saved": datetime.now().isoformat()
     }
@@ -489,22 +490,25 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_size_MB = round(file_size / 1000000, 2)
         download_limit_MB = round(bot_download_limit / 1000000, 2)
         filename = normalize_filename(filename)
+
         if file_size > bot_download_limit:
             # too large for Telegram bot download, create .tglink placeholder
             save_path = os.path.join(upload_folder, f"{filename}.tglink")
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
             placeholder = {
                 "filename": filename,
                 "file_id": file_id,
                 "file_type": file_type,
-                "file_size": str(file_size_MB) + "MB",
-                "download_limit": str(download_limit_MB) + "MB",
+                "file_size": f"{file_size_MB}MB",
+                "download_limit": f"{download_limit_MB}MB",
                 "date_saved": datetime.now().isoformat(),
                 "note": "File size exceeds Telegram bot download limit. This placeholder is necessary for the file to be sent properly. Data in this file is for your reference, as it is nearly a copy of the index entry."
             }
+
             with open(save_path, "w") as f:
                 json.dump(placeholder, f, indent=2)
-            add_file_to_index(file_id, f"{filename}.tglink", file_type, save_path)
+            add_file_to_index(file_id, f"{filename}.tglink", file_type, save_path, file_size_MB)
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File is too large for Telegram bot download. Indexed and placeholder created:\n<code>{save_path}</code>", parse_mode='HTML')
             return
 
@@ -515,7 +519,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
             await file_info.download_to_drive(save_path)
-            add_file_to_index(file_id, filename, file_type, save_path)
+            add_file_to_index(file_id, filename, file_type, save_path, file_size_MB)
             await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"{file_type.capitalize()} saved: \n<code>{save_path}</code>", parse_mode='HTML')
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n<code>{str(e)}</code> \n\nFile type: {file_type} \nDownload limit: {download_limit_MB}MB \nFile size: {file_size_MB}MB \nFile info: {file_info}")
@@ -552,8 +556,8 @@ if __name__ == '__main__':
 
     # read messages as commands
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))
-    
-    # read all files for upload
+
+    # read most files for upload
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, handle_upload))
 
     app.run_polling()
