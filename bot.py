@@ -300,7 +300,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     chat_id = update.effective_chat.id
     if not context.args:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \n\nor to get everything in a folder:\n<code>/get path/to/dir/</code> \n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \nGet everything in a folder:\n<code>/get path/to/dir/</code> \nBy type: <code>/get -t video</code> \nFor info: <code>/get -i</code>\n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
         file_path = os.path.normpath(upload_folder)
     elif context.args[0] and context.args[0] == "-t":
         if len(context.args) < 2:
@@ -321,8 +321,31 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await context.bot.send_message(chat_id=chat_id, text=f"No files by type <code>{query_type}</code> were found in the index.", parse_mode='HTML')
             return
-    else:
-        file_path = os.path.normpath(" ".join(context.args))
+    elif context.args[0] and context.args[0] == "-i":
+        idx = load_index()
+        total_files = len(idx)
+        type_counts = {}
+        total_storage_MB = 0.0
+        for fname, entry in idx.items():
+            t = entry.get("file_type", "unknown")
+            type_counts[t] = type_counts.get(t, 0) + 1
+            # Only count files that are not .tglink (placeholders)
+            if not fname.endswith(".tglink"):
+                # entry["file_size"] is a string like "3.2MB"
+                size_str = entry.get("file_size", "0MB")
+                try:
+                    total_storage_MB += float(size_str.replace("MB", ""))
+                except Exception:
+                    pass
+        lines = [
+            f"Total files in index: <b>{total_files}</b>",
+            "File types indexed:"
+        ]
+        for t, count in type_counts.items():
+            lines.append(f"  <code>{t}</code>: <b>{count}</b>")
+        lines.append(f"\nStorage used: <b>{total_storage_MB:.2f} MB</b>")
+        await context.bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode='HTML')
+        return
 
     # wildcard support
     if any(char in file_path for char in ['*', '?', '[']):
