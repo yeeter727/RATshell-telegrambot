@@ -324,14 +324,16 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif context.args[0] and context.args[0] == "-i":
         idx = load_index()
         total_files = len(idx)
+        total_downloaded = 0
         type_counts = {}
         total_storage_MB = 0.0
         for fname, entry in idx.items():
             t = entry.get("file_type", "unknown")
             type_counts[t] = type_counts.get(t, 0) + 1
-            # Only count files that are not .tglink (placeholders)
+            # only count files that are not .tglink (placeholders)
             if not fname.endswith(".tglink"):
                 # entry["file_size"] is a string like "3.2MB"
+                total_downloaded += 1
                 size_str = entry.get("file_size", "0MB")
                 try:
                     total_storage_MB += float(size_str.replace("MB", ""))
@@ -339,6 +341,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
         lines = [
             f"Total files in index: <b>{total_files}</b>",
+            f"Files downloaded: <b>{total_downloaded}</b>",
             "File types indexed:"
         ]
         for t, count in type_counts.items():
@@ -547,7 +550,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             add_file_to_index(file_id, filename, file_type, save_path, file_size_MB)
             await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"{file_type.capitalize()} saved: \n<code>{save_path}</code>", parse_mode='HTML')
         except Exception as e:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n<code>{str(e)}</code> \n\nFile type: {file_type} \nDownload limit: {download_limit_MB}MB \nFile size: {file_size_MB}MB \nFile info: {file_info}")
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n<code>{str(e)}</code> \n\nFile type: {file_type} \nDownload limit: {download_limit_MB}MB \nFile size: {file_size_MB}MB \nFile info: {file_info}", parse_mode='HTML')
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
 
