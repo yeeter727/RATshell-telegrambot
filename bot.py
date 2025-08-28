@@ -346,6 +346,8 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"\nStorage used: <b>{total_storage_MB:.2f} MB</b>")
         await context.bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode='HTML')
         return
+    else:
+        file_path = os.path.normpath(" ".join(context.args))
 
     # wildcard support
     if any(char in file_path for char in ['*', '?', '[']):
@@ -584,3 +586,4 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, handle_upload))
 
     app.run_polling()
+
