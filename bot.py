@@ -32,6 +32,10 @@ try:
     bot_download_limit
 except NameError:
     bot_download_limit = 20970496
+try:
+    tags_file
+except NameError:
+    tags_file = "tags.json"
 
 # create access_log if not found
 if not os.path.exists(access_log):
@@ -64,11 +68,22 @@ def save_index(index):
     with open(file_index, "w") as f:
         json.dump(index, f, indent=2)
 
+def load_tags():
+    if os.path.exists(tags_file):
+        with open(tags_file, "r") as f:
+            return json.load(f)
+    return []
+
+def save_tags(tags):
+    with open(tags_file, "w") as f:
+        json.dump(tags, f, indent=2)
+
 def add_file_to_index(file_id, filename, file_type, saved_path, file_size_MB):
     idx = load_index()
     idx[filename] = {
         "file_id": file_id,
         "file_type": file_type,
+        "tag": None,
         "file_size": f"{file_size_MB}MB",
         "saved_path": saved_path,
         "date_saved": datetime.now().isoformat()
@@ -78,6 +93,70 @@ def add_file_to_index(file_id, filename, file_type, saved_path, file_size_MB):
 def get_file_entry_by_filename(filename):
     idx = load_index()
     return idx.get(filename)
+
+def extract_file_info(message):
+    
+    filename = None
+    file_type = None
+    file_id = None
+    file_size = None
+
+    if message.photo:
+        photo = message.photo[-1]
+        filename = f"photo_{photo.file_unique_id}.jpg"
+        file_type = "photo"
+        file_id = photo.file_id
+        file_size = photo.file_size
+        file_unique_id = photo.file_unique_id
+    elif message.video:
+        video = message.video
+        filename = video.file_name or f"video_{video.file_unique_id}.mp4"
+        file_type = "video"
+        file_id = video.file_id
+        file_size = video.file_size
+        file_unique_id = video.file_unique_id
+    elif message.audio:
+        audio = message.audio
+        filename = audio.file_name or f"audio_{audio.file_unique_id}.mp3"
+        file_type = "audio"
+        file_id = audio.file_id
+        file_size = audio.file_size
+        file_unique_id = audio.file_unique_id
+    elif message.voice:
+        voice = message.voice
+        filename = f"voice_{voice.file_unique_id}.ogg"
+        file_type = "voice"
+        file_id = voice.file_id
+        file_size = voice.file_size
+        file_unique_id = voice.file_unique_id
+    elif message.animation:
+        anim = message.animation
+        filename = anim.file_name or f"animation_{anim.file_unique_id}.mp4"
+        file_type = "animation"
+        file_id = anim.file_id
+        file_size = anim.file_size
+        file_unique_id = anim.file_unique_id
+    elif message.sticker:
+        sticker = message.sticker
+        if getattr(sticker, "is_video", False):
+            filename = f"sticker_{sticker.file_unique_id}.webm"
+        elif sticker.is_animated:
+            filename = f"sticker_{sticker.file_unique_id}.tgs"
+        else:
+            filename = f"sticker_{sticker.file_unique_id}.webp"
+        file_type = "sticker"
+        file_id = sticker.file_id
+        file_size = sticker.file_size
+        file_unique_id = sticker.file_unique_id
+    elif message.document:
+        doc = message.document
+        filename = doc.file_name
+        file_type = "document"
+        file_id = doc.file_id
+        file_size = doc.file_size
+        file_unique_id = doc.file_unique_id
+
+    return filename, file_type, file_id, file_size, file_unique_id
 
 def normalize_filename(filename: str, max_length: int = 255) -> str:
     filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')     # Normalize Unicode characters (e.g., smart quotes, accents)    
@@ -138,7 +217,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Get IP Info", callback_data='get_ip')],
         [InlineKeyboardButton("Neofetch", callback_data='run_neofetch')],
-        [InlineKeyboardButton("Print Access Log", callback_data='print_log')]
+        [InlineKeyboardButton("Print Access Log", callback_data='print_log')],
+        [InlineKeyboardButton("Manage Media Tags", callback_data='manage_tags')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(start_message, reply_markup=reply_markup)
@@ -221,10 +301,193 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("Get IP Info", callback_data='get_ip')],
             [InlineKeyboardButton("Run Neofetch", callback_data='run_neofetch')],
-            [InlineKeyboardButton("Print Access Log", callback_data='print_log')]
+            [InlineKeyboardButton("Print Access Log", callback_data='print_log')],
+            [InlineKeyboardButton("Manage Media Tags", callback_data='manage_tags')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=start_message, reply_markup=reply_markup)
+
+# --- MENU HANDLERS ---
+
+async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Handles displaying the main tag management menu
+    query = update.callback_query
+    if query:
+        await query.answer()
+        send_func = query.edit_message_text
+    else:
+        send_func = update.message.reply_text
+
+    tags = load_tags()
+    tag_list = "\n".join(tags) if tags else "No tags yet."
+    keyboard = [
+        [InlineKeyboardButton("View Tag", callback_data='view_tag')],
+        [InlineKeyboardButton("Add Tag", callback_data='add_tag')],
+        [InlineKeyboardButton("Delete Tag", callback_data='delete_tag')],
+        [InlineKeyboardButton("Tag Media", callback_data='tag_media')],
+        [InlineKeyboardButton("\u200b", callback_data='noop')],
+        [InlineKeyboardButton("Back", callback_data='go_back')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await send_func(
+        text=f"Available tags:\n{tag_list}",
+        reply_markup=reply_markup
+    )
+
+# --- ADD TAG ---
+
+async def add_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data['awaiting_new_tag'] = True
+    await query.edit_message_text("Send me the tag name you want to add:")
+
+async def add_tag_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get('awaiting_new_tag'):
+        tag = update.message.text.strip()
+        tags = load_tags()
+        if tag in tags:
+            await update.message.reply_text("Tag already exists.")
+        else:
+            tags.append(tag)
+            save_tags(tags)
+            await update.message.reply_text(f"Tag <code>{tag}</code> added.", parse_mode='HTML')
+        context.user_data['awaiting_new_tag'] = False
+        # Show tag menu again
+        await manage_tags_menu(update, context)
+
+# --- DELETE TAG ---
+
+async def delete_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tags = load_tags()
+    if not tags:
+        await query.edit_message_text("No tags to delete.")
+        return
+    keyboard = [[InlineKeyboardButton(tag, callback_data=f'del_tag_{tag}')] for tag in tags]
+    keyboard.append([InlineKeyboardButton("Back", callback_data='manage_tags')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("Pick a tag to delete:", reply_markup=reply_markup)
+
+async def delete_tag_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    tag = query.data.replace('del_tag_', '')
+    tags = load_tags()
+    if tag in tags:
+        tags.remove(tag)
+        save_tags(tags)
+        await query.edit_message_text(f"Tag <code>{tag}</code> deleted.", parse_mode='HTML')
+    else:
+        await query.edit_message_text("Tag not found.")
+    # Show menu again
+    await manage_tags_menu(update, context)
+
+# --- TAG MEDIA ---
+
+async def tag_media_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data['tag_next_media'] = True
+    await query.edit_message_text("Forward the file you want to tag.")
+
+async def tag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get('tag_next_media'):
+        msg = update.message
+
+        filename, file_type, file_id, file_size, file_unique_id = extract_file_info(update.message)
+        # Try to find this file in your index
+        idx = load_index()
+        entry = idx.get(filename)
+        if not entry:
+            # Optionally, try to match by file_id or unique_id
+            for fname, ent in idx.items():
+                if ent.get("file_id") == file_id:
+                    entry = ent
+                    filename = fname
+                    break
+        if not entry:
+            await msg.reply_text("This media is not in the index. Please upload it first.")
+            context.user_data['tag_next_media'] = False
+            return
+
+        # Save info for the callback
+        context.user_data['pending_tag_media'] = {
+            "filename": filename,
+            "file_id": file_id
+        }
+
+        # Prompt for tag
+        tags = load_tags()
+        keyboard = [[InlineKeyboardButton(tag, callback_data=f'tag_media_apply_{tag}')] for tag in tags]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await msg.reply_text("Pick a tag to apply:", reply_markup=reply_markup)
+        context.user_data['tag_next_media'] = False
+
+# --- TAG MEDIA APPLY ---
+
+async def tag_media_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    tag = query.data.replace('tag_media_apply_', '')
+    pending = context.user_data.get('pending_tag_media')
+    if not pending:
+        await query.edit_message_text("No media to tag.")
+        return
+    idx = load_index()
+    fname = pending['filename']
+    if fname in idx:
+        idx[fname]['tag'] = tag
+        save_index(idx)
+        await query.edit_message_text(f"File <code>{fname}</code> tagged as <code>{tag}</code>.", parse_mode='HTML')
+    else:
+        await query.edit_message_text("File not found in index.")
+    context.user_data['pending_tag_media'] = None
+
+async def view_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tags = load_tags()  # This should return a list of tag strings
+    if not tags:
+        await query.edit_message_text("No tags to view.")
+        return
+    keyboard = [[InlineKeyboardButton(tag, callback_data=f'view_tag_{tag}')] for tag in tags]
+    keyboard.append([InlineKeyboardButton("Back", callback_data='manage_tags')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("Select a tag to view files:", reply_markup=reply_markup)
+
+async def view_tag_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tag = query.data.replace('view_tag_', '', 1)
+    idx = load_index()
+    matched_files = [
+        (fname, entry)
+        for fname, entry in idx.items()
+        if entry.get("tag") == tag
+    ]
+    if not matched_files:
+        await query.edit_message_text(f"No files found with tag <code>{tag}</code>.", parse_mode='HTML')
+        return
+    await query.edit_message_text(f"Sending files with tag <code>{tag}</code>:", parse_mode='HTML')
+    chat_id = query.message.chat.id
+    for fname, entry in matched_files:
+        file_path = entry.get("saved_path")
+        await send_file(context, chat_id, entry, file_path, fname)
+
+async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Check if waiting for tag input
+    if context.user_data.get('awaiting_new_tag'):
+        await add_tag_receive(update, context)
+        return
+    # Otherwise treat as a shell command
+    await handle_shell_commands(update, context)
+
+async def media_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get('tag_next_media'):
+        await tag_media_receive(update, context)
+        return
+    # Default: handle as a normal upload
+    await handle_upload(update, context)
 
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unsolicited message"):
@@ -412,67 +675,9 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Sent file"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
-
+    
+    filename, file_type, file_id, file_size, file_unique_id = extract_file_info(update.message)
     file_info = None
-    filename = None
-    file_type = None
-    file_id = None
-    file_size = None
-
-    if update.message.photo:
-        photo = update.message.photo[-1]
-        filename = f"photo_{photo.file_unique_id}.jpg"
-        file_type = "photo"
-        file_id = photo.file_id
-        file_size = photo.file_size
-        file_unique_id = photo.file_unique_id
-    elif update.message.video:
-        video = update.message.video
-        filename = video.file_name or f"video_{video.file_unique_id}.mp4"
-        file_type = "video"
-        file_id = video.file_id
-        file_size = video.file_size
-        file_unique_id = video.file_unique_id
-    elif update.message.audio:
-        audio = update.message.audio
-        filename = audio.file_name or f"audio_{audio.file_unique_id}.mp3"
-        file_type = "audio"
-        file_id = audio.file_id
-        file_size = audio.file_size
-        file_unique_id = audio.file_unique_id
-    elif update.message.voice:
-        voice = update.message.voice
-        filename = f"voice_{voice.file_unique_id}.ogg"
-        file_type = "voice"
-        file_id = voice.file_id
-        file_size = voice.file_size
-        file_unique_id = voice.file_unique_id
-    elif update.message.animation:
-        anim = update.message.animation
-        filename = anim.file_name or f"animation_{anim.file_unique_id}.mp4"
-        file_type = "animation"
-        file_id = anim.file_id
-        file_size = anim.file_size
-        file_unique_id = anim.file_unique_id
-    elif update.message.sticker:
-        sticker = update.message.sticker
-        if getattr(sticker, "is_video", False):
-            filename = f"sticker_{sticker.file_unique_id}.webm"
-        elif sticker.is_animated:
-            filename = f"sticker_{sticker.file_unique_id}.tgs"
-        else:
-            filename = f"sticker_{sticker.file_unique_id}.webp"
-        file_type = "sticker"
-        file_id = sticker.file_id
-        file_size = sticker.file_size
-        file_unique_id = sticker.file_unique_id
-    elif update.message.document:
-        doc = update.message.document
-        filename = doc.file_name
-        file_type = "document"
-        file_id = doc.file_id
-        file_size = doc.file_size
-        file_unique_id = doc.file_unique_id
 
     idx = load_index()
     if 'remove_next' in context.user_data and context.user_data['remove_next']:
@@ -574,19 +779,32 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if __name__ == '__main__':
     app = ApplicationBuilder().token(bot_token).build()
 
-    app.add_handler(CallbackQueryHandler(button_handler))
-
     app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('tags', manage_tags_menu))
     app.add_handler(CommandHandler('get', get_file))
     app.add_handler(CommandHandler('remove', remove_file))
 
+    # tag handlers
+    app.add_handler(CallbackQueryHandler(manage_tags_menu, pattern="manage_tags"))
+    app.add_handler(CallbackQueryHandler(add_tag_prompt, pattern="add_tag"))
+    app.add_handler(CallbackQueryHandler(delete_tag_prompt, pattern="delete_tag"))
+    app.add_handler(CallbackQueryHandler(delete_tag_confirm, pattern="del_tag_"))
+    app.add_handler(CallbackQueryHandler(tag_media_apply, pattern="^tag_media_apply_"))
+    app.add_handler(CallbackQueryHandler(tag_media_prompt, pattern="tag_media"))
+    app.add_handler(CallbackQueryHandler(view_tag_files, pattern="^view_tag_"))
+    app.add_handler(CallbackQueryHandler(view_tag_prompt, pattern="^view_tag$"))
+
+    app.add_handler(CallbackQueryHandler(button_handler))
+
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
-    # read messages as commands
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))
+    # route text messages
+    #app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
-    # read most files for upload
-    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, handle_upload))
+    # route most media
+    #app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, handle_upload))
+    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
 
     app.run_polling()
 
