@@ -215,10 +215,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     keyboard = [
-        [InlineKeyboardButton("Get IP Info", callback_data='get_ip')],
-        [InlineKeyboardButton("Neofetch", callback_data='run_neofetch')],
-        [InlineKeyboardButton("Print Access Log", callback_data='print_log')],
-        [InlineKeyboardButton("Manage Media Tags", callback_data='manage_tags')]
+        [InlineKeyboardButton("📡 Get IP Info", callback_data='get_ip')],
+        [InlineKeyboardButton("🖥 Neofetch", callback_data='run_neofetch')],
+        [InlineKeyboardButton("📄 Print Access Log", callback_data='print_log')],
+        [InlineKeyboardButton("🏷️ Manage Media Tags", callback_data='manage_tags')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(start_message, reply_markup=reply_markup)
@@ -245,7 +245,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             output = f"Error: {str(e)}"
 
-        keyboard = [[InlineKeyboardButton("Back", callback_data='go_back')]]
+        keyboard = [[InlineKeyboardButton("◀️ Back", callback_data='go_back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(text=f"<pre>{output}</pre>", reply_markup=reply_markup, parse_mode='HTML')
@@ -282,7 +282,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             output = f"Error: {str(e)}"
         
-        keyboard = [[InlineKeyboardButton("Back", callback_data='go_back')]]
+        keyboard = [[InlineKeyboardButton("◀️ Back", callback_data='go_back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(text=output, reply_markup=reply_markup, parse_mode='HTML')
@@ -291,7 +291,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(access_log, 'r') as file:
             content = file.read()
 
-        keyboard = [[InlineKeyboardButton("Back", callback_data='go_back')]]
+        keyboard = [[InlineKeyboardButton("◀️ Back", callback_data='go_back')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(text=f"<code>{content}</code>", reply_markup=reply_markup, parse_mode='HTML')
@@ -299,15 +299,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'go_back':
         # recreate the original menu
         keyboard = [
-            [InlineKeyboardButton("Get IP Info", callback_data='get_ip')],
-            [InlineKeyboardButton("Run Neofetch", callback_data='run_neofetch')],
-            [InlineKeyboardButton("Print Access Log", callback_data='print_log')],
-            [InlineKeyboardButton("Manage Media Tags", callback_data='manage_tags')]
+            [InlineKeyboardButton("📡 Get IP Info", callback_data='get_ip')],
+            [InlineKeyboardButton("🖥 Neofetch", callback_data='run_neofetch')],
+            [InlineKeyboardButton("📄 Print Access Log", callback_data='print_log')],
+            [InlineKeyboardButton("🏷️ Manage Media Tags", callback_data='manage_tags')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=start_message, reply_markup=reply_markup)
-
-# --- MENU HANDLERS ---
 
 async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Handles displaying the main tag management menu
@@ -321,20 +319,12 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tags = load_tags()
     tag_list = "\n".join(tags) if tags else "No tags yet."
     keyboard = [
-        [InlineKeyboardButton("View Tag", callback_data='view_tag')],
-        [InlineKeyboardButton("Add Tag", callback_data='add_tag')],
-        [InlineKeyboardButton("Delete Tag", callback_data='delete_tag')],
-        [InlineKeyboardButton("Tag Media", callback_data='tag_media')],
-        [InlineKeyboardButton("\u200b", callback_data='noop')],
-        [InlineKeyboardButton("Back", callback_data='go_back')]
+        [InlineKeyboardButton("🔍 View Tagged", callback_data='view_tag'), InlineKeyboardButton("📎 Tag Media", callback_data='tag_media')],
+        [InlineKeyboardButton("➕ Create Tag", callback_data='add_tag'), InlineKeyboardButton("🗑️ Delete Tag", callback_data='delete_tag')],
+        [InlineKeyboardButton("◀️ Back", callback_data='go_back')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await send_func(
-        text=f"Available tags:\n{tag_list}",
-        reply_markup=reply_markup
-    )
-
-# --- ADD TAG ---
+    await send_func(text=f"Available tags:\n<code>{tag_list}</code>", reply_markup=reply_markup, parse_mode='HTML')
 
 async def add_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -356,14 +346,12 @@ async def add_tag_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Show tag menu again
         await manage_tags_menu(update, context)
 
-# --- DELETE TAG ---
-
 async def delete_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     tags = load_tags()
     if not tags:
-        await query.edit_message_text("No tags to delete.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="No tags to delete.")
         return
     keyboard = [[InlineKeyboardButton(tag, callback_data=f'del_tag_{tag}')] for tag in tags]
     keyboard.append([InlineKeyboardButton("Back", callback_data='manage_tags')])
@@ -383,72 +371,90 @@ async def delete_tag_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Show menu again
     await manage_tags_menu(update, context)
 
-# --- TAG MEDIA ---
-
 async def tag_media_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    tags = load_tags()
+    if not tags:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="You don't have any available tags, create one first.")
+        return
     context.user_data['tag_next_media'] = True
-    await query.edit_message_text("Forward the file you want to tag.")
+    context.user_data['pending_tag_media_batch'] = []
+    await query.edit_message_text("Forward the files you want to tag.")
 
 async def tag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get('tag_next_media'):
-        msg = update.message
+    if not context.user_data.get('tag_next_media'):
+        return
 
-        filename, file_type, file_id, file_size, file_unique_id = extract_file_info(update.message)
-        # Try to find this file in your index
-        idx = load_index()
-        entry = idx.get(filename)
-        if not entry:
-            # Optionally, try to match by file_id or unique_id
-            for fname, ent in idx.items():
-                if ent.get("file_id") == file_id:
-                    entry = ent
-                    filename = fname
-                    break
-        if not entry:
-            await msg.reply_text("This media is not in the index. Please upload it first.")
-            context.user_data['tag_next_media'] = False
-            return
-
-        # Save info for the callback
-        context.user_data['pending_tag_media'] = {
-            "filename": filename,
-            "file_id": file_id
-        }
-
-        # Prompt for tag
-        tags = load_tags()
-        keyboard = [[InlineKeyboardButton(tag, callback_data=f'tag_media_apply_{tag}')] for tag in tags]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await msg.reply_text("Pick a tag to apply:", reply_markup=reply_markup)
+    msg = update.message
+    filename, file_type, file_id, file_size, file_unique_id = extract_file_info(msg)
+    idx = load_index()
+    entry = idx.get(filename)
+    if not entry:
+        # Optionally, try to match by file_id
+        for fname, ent in idx.items():
+            if ent.get("file_id") == file_id:
+                entry = ent
+                filename = fname
+                break
+    if not entry:
         context.user_data['tag_next_media'] = False
+        context.user_data['pending_tag_media_batch'] = []
+        await msg.reply_text("This media is not in the index. Tagging canceled.")
+        return
 
-# --- TAG MEDIA APPLY ---
+    # Add to batch, but avoid duplicates
+    batch = context.user_data.setdefault('pending_tag_media_batch', [])
+    if not any(item['filename'] == filename for item in batch):
+        batch.append({"filename": filename, "file_id": file_id})
+
+    # Prompt for tag after each file, or allow more files to be forwarded
+    tags = load_tags()
+    keyboard = [[InlineKeyboardButton(tag, callback_data=f'tag_media_apply_{tag}')] for tag in tags]
+    keyboard.append([InlineKeyboardButton("Cancel", callback_data='tag_media_cancel')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await msg.reply_text("Pick a tag to apply to these forwarded files, or keep forwarding files to add to the batch.", reply_markup=reply_markup)
 
 async def tag_media_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     tag = query.data.replace('tag_media_apply_', '')
-    pending = context.user_data.get('pending_tag_media')
-    if not pending:
-        await query.edit_message_text("No media to tag.")
+    batch = context.user_data.get('pending_tag_media_batch', [])
+    if not batch:
+        await query.edit_message_text("No files to tag.")
+        context.user_data['tag_next_media'] = False
         return
+
     idx = load_index()
-    fname = pending['filename']
-    if fname in idx:
-        idx[fname]['tag'] = tag
-        save_index(idx)
-        await query.edit_message_text(f"File <code>{fname}</code> tagged as <code>{tag}</code>.", parse_mode='HTML')
+    tagged = []
+    for item in batch:
+        fname = item['filename']
+        if fname in idx:
+            idx[fname]['tag'] = tag
+            tagged.append(fname)
+    save_index(idx)
+    context.user_data['pending_tag_media_batch'] = []
+    context.user_data['tag_next_media'] = False
+    if tagged:
+        await query.edit_message_text(
+            f"Tagged <code>{len(tagged)}</code> files as <code>{tag}</code>:\n" +
+            "\n".join(f"<code>{fname}</code>" for fname in tagged),
+            parse_mode='HTML'
+        )
     else:
-        await query.edit_message_text("File not found in index.")
-    context.user_data['pending_tag_media'] = None
+        await query.edit_message_text("No files were tagged.")
+
+async def tag_media_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    context.user_data['pending_tag_media_batch'] = []
+    context.user_data['tag_next_media'] = False
+    await query.edit_message_text("Tagging canceled.")
 
 async def view_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     tags = load_tags()  # This should return a list of tag strings
     if not tags:
-        await query.edit_message_text("No tags to view.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="No tags to view.")
         return
     keyboard = [[InlineKeyboardButton(tag, callback_data=f'view_tag_{tag}')] for tag in tags]
     keyboard.append([InlineKeyboardButton("Back", callback_data='manage_tags')])
@@ -607,7 +613,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Files downloaded: <b>{total_downloaded}</b>",
             "File types indexed:"
         ]
-        for t, count in type_counts.items():
+        for t, count in sorted(type_counts.items(), key=lambda x: x[1], reverse=True):
             lines.append(f"  <code>{t}</code>: <b>{count}</b>")
         lines.append(f"\nStorage used: <b>{total_storage_MB:.2f} MB</b>")
         await context.bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode='HTML')
@@ -680,22 +686,23 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_info = None
 
     idx = load_index()
-    if 'remove_next' in context.user_data and context.user_data['remove_next']:
+    if context.user_data.get('remove_next'):
         # remove by file ID first
         to_remove = None
         for fname, entry in idx.items():
             if entry.get("file_id") == file_id:
                 to_remove = fname
                 break
+        msg = ""
         if to_remove:
             entry = idx.pop(to_remove)
             save_index(idx)
             try:
                 if os.path.exists(entry["saved_path"]):
                     os.remove(entry["saved_path"])
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{to_remove}</code> removed from index and disk (by file ID).", parse_mode='HTML')
+                msg = f"File <code>{to_remove}</code> removed from index and disk (by file ID)."
             except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed from index, but failed to delete file: \n{e}")
+                msg = f"Removed from index, but failed to delete file: \n{e}"
         # fall back to filename if not found by file ID
         elif filename and filename in idx:
             entry = idx.pop(filename)
@@ -703,13 +710,17 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 if os.path.exists(entry["saved_path"]):
                     os.remove(entry["saved_path"])
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{filename}</code> removed from index and disk (by filename).", parse_mode='HTML')
+                msg = f"File <code>{filename}</code> removed from index and disk (by filename)."
             except Exception as e:
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Removed from index, but failed to delete file: \n{e}")
+                msg = f"Removed from index, but failed to delete file: \n{e}"
         else:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="File not found in index (by file ID or filename).")
-
-        context.user_data['remove_next'] = False
+            msg = "File not found in index (by file ID or filename)."
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=msg,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Stop deleting", callback_data='stop_deleting')]])
+        )
         return
 
     elif filename and file_id and file_type and file_size is not None:
@@ -767,8 +778,18 @@ async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="File removal canceled.")
         context.user_data['remove_next'] = False
         return
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Forward item to be deleted from index and disk. \nUse this to cancel: <code>/remove -c</code>", parse_mode='HTML')
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Forward items to be deleted from index and disk. Tap 'Stop deleting' to end removal mode.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Stop deleting", callback_data='stop_deleting')]])
+    )
     context.user_data['remove_next'] = True
+
+async def stop_deleting_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    context.user_data['remove_next'] = False
+    await query.answer()
+    await query.edit_message_text("Stopped deletion mode.")
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unknown bot command"):
@@ -790,20 +811,20 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(delete_tag_prompt, pattern="delete_tag"))
     app.add_handler(CallbackQueryHandler(delete_tag_confirm, pattern="del_tag_"))
     app.add_handler(CallbackQueryHandler(tag_media_apply, pattern="^tag_media_apply_"))
+    app.add_handler(CallbackQueryHandler(tag_media_cancel, pattern="tag_media_cancel"))
     app.add_handler(CallbackQueryHandler(tag_media_prompt, pattern="tag_media"))
     app.add_handler(CallbackQueryHandler(view_tag_files, pattern="^view_tag_"))
     app.add_handler(CallbackQueryHandler(view_tag_prompt, pattern="^view_tag$"))
 
+    app.add_handler(CallbackQueryHandler(stop_deleting_callback, pattern="stop_deleting"))
     app.add_handler(CallbackQueryHandler(button_handler))
 
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
     # route text messages
-    #app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
     # route most media
-    #app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, handle_upload))
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
 
     app.run_polling()
