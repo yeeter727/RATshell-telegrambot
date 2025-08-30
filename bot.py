@@ -81,7 +81,7 @@ def add_file_to_index(file_id, filename, file_type, saved_path, file_size_MB):
     idx[filename] = {
         "file_id": file_id,
         "file_type": file_type,
-        "tag": None,
+        "tags": [],
         "file_size": f"{file_size_MB}MB",
         "saved_path": saved_path,
         "date_saved": datetime.now().isoformat()
@@ -435,7 +435,11 @@ async def tag_media_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for item in batch:
         fname = item['filename']
         if fname in idx:
-            idx[fname]['tag'] = tag
+            #idx[fname]['tag'] = tag
+            if "tags" not in idx[fname]:
+                idx[fname]['tags'] = []
+            if tag not in idx[fname]['tags']:
+                idx[fname]['tags'].append(tag)
             tagged.append(fname)
     save_index(idx)
     context.user_data['pending_tag_media_batch'] = []
@@ -473,7 +477,7 @@ async def view_tag_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     matched_files = [
         (fname, entry)
         for fname, entry in idx.items()
-        if entry.get("tag") == tag
+        if tag in entry.get("tags", [])
     ]
     if not matched_files:
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"No files found with tag <code>{tag}</code>.", parse_mode='HTML')
@@ -576,7 +580,10 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not context.args:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \nGet everything in a folder:\n<code>/get path/to/dir/</code> \nBy type: <code>/get -t video</code> \nFor info: <code>/get -i</code>\n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
-        file_path = os.path.normpath(upload_folder)
+        if socket.gethostname() != 'potater':
+            file_path = os.path.normpath(upload_folder)
+        else:
+            return
     elif context.args[0] and context.args[0] == "-t":
         if len(context.args) < 2:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Specify a file type: \n<code>/get -t video</code> \n\nAll file types: \n<code>photo, video, audio, voice, document, animation, sticker</code>", parse_mode='HTML')
