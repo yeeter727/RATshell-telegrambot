@@ -30,11 +30,9 @@ else:
 
 try:
     bot_download_limit
-except NameError:
-    bot_download_limit = 20970496
-try:
     tags_file
 except NameError:
+    bot_download_limit = 20970496
     tags_file = "tags.json"
 
 # create access_log if not found
@@ -307,7 +305,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=start_message, reply_markup=reply_markup)
 
-async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send=False):
+    if not is_owner(update, "/tags"):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        return
     # Handles displaying the main tag management menu
     query = update.callback_query
     if query:
@@ -324,7 +325,10 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("◀️ Back", callback_data='go_back')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await send_func(text=f"Available tags:\n<code>{tag_list}</code>", reply_markup=reply_markup, parse_mode='HTML')
+    if send:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Available tags:\n<code>{tag_list}</code>", reply_markup=reply_markup, parse_mode='HTML')
+    else:
+        await send_func(text=f"Available tags:\n<code>{tag_list}</code>", reply_markup=reply_markup, parse_mode='HTML')
 
 async def add_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -380,7 +384,9 @@ async def tag_media_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     context.user_data['tag_next_media'] = True
     context.user_data['pending_tag_media_batch'] = []
-    await query.edit_message_text("Forward the files you want to tag.")
+    keyboard = [[InlineKeyboardButton("Cancel", callback_data='tag_media_cancel')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("Forward the files you want to tag.", reply_markup=reply_markup)
 
 async def tag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get('tag_next_media'):
@@ -435,11 +441,8 @@ async def tag_media_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['pending_tag_media_batch'] = []
     context.user_data['tag_next_media'] = False
     if tagged:
-        await query.edit_message_text(
-            f"Tagged <code>{len(tagged)}</code> files as <code>{tag}</code>:\n" +
-            "\n".join(f"<code>{fname}</code>" for fname in tagged),
-            parse_mode='HTML'
-        )
+        await query.edit_message_text(f"Tagged <code>{len(tagged)}</code> files as <code>{tag}</code>:\n" + "\n".join(f"<code>{fname}</code>" for fname in tagged), parse_mode='HTML')
+        await manage_tags_menu(update, context, send=True)
     else:
         await query.edit_message_text("No files were tagged.")
 
@@ -447,7 +450,8 @@ async def tag_media_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     context.user_data['pending_tag_media_batch'] = []
     context.user_data['tag_next_media'] = False
-    await query.edit_message_text("Tagging canceled.")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Tagging mode canceled.")
+    await manage_tags_menu(update, context)
 
 async def view_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -472,13 +476,15 @@ async def view_tag_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if entry.get("tag") == tag
     ]
     if not matched_files:
-        await query.edit_message_text(f"No files found with tag <code>{tag}</code>.", parse_mode='HTML')
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"No files found with tag <code>{tag}</code>.", parse_mode='HTML')
+        await manage_tags_menu(update, context)
         return
-    await query.edit_message_text(f"Sending files with tag <code>{tag}</code>:", parse_mode='HTML')
     chat_id = query.message.chat.id
     for fname, entry in matched_files:
         file_path = entry.get("saved_path")
         await send_file(context, chat_id, entry, file_path, fname)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sent <code>{len(matched_files)}</code> files with tag <code>{tag}</code>.", parse_mode='HTML')
+    await manage_tags_menu(update, context, send=True)
 
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check if waiting for tag input
@@ -828,4 +834,3 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
 
     app.run_polling()
-
