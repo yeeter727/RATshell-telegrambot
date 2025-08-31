@@ -28,12 +28,17 @@ else:
     print("Missing required tg.conf file.")
     exit()
 
+# (lazy) config fix
 try:
     bot_download_limit
     tags_file
 except NameError:
     bot_download_limit = 20970496
     tags_file = "tags.json"
+try:
+    pot
+except NameError:
+    pot = False
 
 # create access_log if not found
 if not os.path.exists(access_log):
@@ -265,7 +270,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 s.close()
 
                 # get public IP address
-                pub_ip = subprocess.run(['curl', 'ifconfig.me'], capture_output=True, text=True, timeout=10)
+                pub_ip = subprocess.run(['curl', '-s', ip_url], capture_output=True, text=True, timeout=10)
                 output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
             elif win:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -274,7 +279,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 s.close()
 
                 # get public IP address
-                pub_ip = subprocess.run("$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest https://ifconfig.me/ip).Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10)
+                pub_ip = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{ip_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10)
                 output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
             else:
                 # get interfaces and addresses
@@ -282,7 +287,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 interfaces = subprocess.run(ip_cmd, shell=True, capture_output=True, text=True)
 
                 # get public IP address
-                pub_ip = subprocess.run(['curl', 'ifconfig.me'], capture_output=True, text=True, timeout=10)
+                pub_ip = subprocess.run(['curl', '-s', ip_url], capture_output=True, text=True, timeout=10)
                 output = f"Public IP Address:\n<code>{pub_ip.stdout.strip()}</code>\n\n\nDevice Interfaces:\n<code>{interfaces.stdout.strip()}</code>" or "No output from curl or ip addr commands."
         except Exception as e:
             output = f"Error: {str(e)}"
@@ -597,15 +602,15 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
             if file_type == "document":
                 await context.bot.send_document(chat_id=chat_id, document=file_id)
             elif file_type == "photo":
-                await context.bot.send_photo(chat_id=chat_id, photo=file_id)
+                await context.bot.send_photo(chat_id=chat_id, photo=file_id, has_spoiler=pot)
             elif file_type == "video":
-                await context.bot.send_video(chat_id=chat_id, video=file_id)
+                await context.bot.send_video(chat_id=chat_id, video=file_id, has_spoiler=pot)
             elif file_type == "audio":
                 await context.bot.send_audio(chat_id=chat_id, audio=file_id)
             elif file_type == "voice":
                 await context.bot.send_voice(chat_id=chat_id, voice=file_id)
             elif file_type == "animation":
-                await context.bot.send_animation(chat_id=chat_id, animation=file_id)
+                await context.bot.send_animation(chat_id=chat_id, animation=file_id, has_spoiler=pot)
             elif file_type == "sticker":
                 await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
             sent = True
@@ -617,15 +622,15 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
             with open(file_path, "rb") as f:
                 if file_entry:
                     if file_type == "photo":
-                        await context.bot.send_photo(chat_id=chat_id, photo=f)
+                        await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=pot)
                     elif file_type == "video":
-                        await context.bot.send_video(chat_id=chat_id, video=f)
+                        await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=pot)
                     elif file_type == "audio":
                         await context.bot.send_audio(chat_id=chat_id, audio=f)
                     elif file_type == "voice":
                         await context.bot.send_voice(chat_id=chat_id, voice=f)
                     elif file_type == "animation":
-                        await context.bot.send_animation(chat_id=chat_id, animation=f)
+                        await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=pot)
                     elif file_type == "sticker":
                         await context.bot.send_sticker(chat_id=chat_id, sticker=f)
                     else:
@@ -644,7 +649,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not context.args:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \nGet everything in a folder:\n<code>/get path/to/dir/</code> \nBy type: <code>/get -t video</code> \nFor info: <code>/get -i</code>\n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
-        if socket.gethostname() != 'potater':
+        if not pot:
             file_path = os.path.normpath(upload_folder)
         else:
             return
@@ -770,7 +775,6 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if entry.get("file_id") == file_id:
                 to_remove = fname
                 break
-        msg = ""
         if to_remove:
             entry = idx.pop(to_remove)
             save_index(idx)
@@ -780,24 +784,9 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg = f"File <code>{to_remove}</code> removed from index and disk (by file ID)."
             except Exception as e:
                 msg = f"Removed from index, but failed to delete file: \n{e}"
-        # fall back to filename if not found by file ID
-        elif filename and filename in idx:
-            entry = idx.pop(filename)
-            save_index(idx)
-            try:
-                if os.path.exists(entry["saved_path"]):
-                    os.remove(entry["saved_path"])
-                msg = f"File <code>{filename}</code> removed from index and disk (by filename)."
-            except Exception as e:
-                msg = f"Removed from index, but failed to delete file: \n{e}"
         else:
-            msg = "File not found in index (by file ID or filename)."
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=msg,
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Stop deleting", callback_data='stop_deleting')]])
-        )
+            msg = "File not found in index (by file ID)."
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode='HTML', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Stop deleting", callback_data='stop_deleting')]]))
         return
 
     elif filename and file_id and file_type and file_size is not None:
