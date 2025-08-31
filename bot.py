@@ -88,9 +88,16 @@ def add_file_to_index(file_id, filename, file_type, saved_path, file_size_MB):
     }
     save_index(idx)
 
-def get_file_entry_by_filename(filename):
+def get_by_filename(filename):
     idx = load_index()
     return idx.get(filename)
+
+def get_by_file_id(file_id):
+    idx = load_index()
+    for fname, entry in idx.items():
+        if entry.get("file_id") == file_id:
+            return fname, entry
+    return None, None
 
 def extract_file_info(message):
     
@@ -403,15 +410,8 @@ async def tag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = update.message
     filename, file_type, file_id, file_size, file_unique_id = extract_file_info(msg)
-    idx = load_index()
-    entry = idx.get(filename)
-    if not entry:
-        # Optionally, try to match by file_id
-        for fname, ent in idx.items():
-            if ent.get("file_id") == file_id:
-                entry = ent
-                filename = fname
-                break
+    fname, entry = get_by_file_id(file_id)
+
     if not entry:
         context.user_data['tag_next_media'] = False
         context.user_data['pending_tag_media_batch'] = []
@@ -420,8 +420,8 @@ async def tag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Add to batch, but avoid duplicates
     batch = context.user_data.setdefault('pending_tag_media_batch', [])
-    if not any(item['filename'] == filename for item in batch):
-        batch.append({"filename": filename, "file_id": file_id})
+    if not any(item['file_id'] == file_id for item in batch):
+        batch.append({"filename": fname, "file_id": file_id})
 
     # Prompt for tag after each file, or allow more files to be forwarded
     tags = load_tags()
@@ -442,14 +442,16 @@ async def tag_media_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     idx = load_index()
     tagged = []
     for item in batch:
-        fname = item['filename']
-        if fname in idx:
-            #idx[fname]['tag'] = tag
-            if "tags" not in idx[fname]:
-                idx[fname]['tags'] = []
-            if tag not in idx[fname]['tags']:
-                idx[fname]['tags'].append(tag)
-            tagged.append(fname)
+        file_id = item['file_id']
+        # Always find by file_id
+        for fname, entry in idx.items():
+            if entry.get("file_id") == file_id:
+                if "tags" not in entry:
+                    entry["tags"] = []
+                if tag not in entry["tags"]:
+                    entry["tags"].append(tag)
+                tagged.append(fname)
+                break
     save_index(idx)
     context.user_data['pending_tag_media_batch'] = []
     context.user_data['tag_next_media'] = False
@@ -479,15 +481,7 @@ async def untag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     msg = update.message
     filename, file_type, file_id, file_size, file_unique_id = extract_file_info(msg)
-    idx = load_index()
-    entry = idx.get(filename)
-    if not entry:
-        # Optionally, try to match by file_id
-        for fname, ent in idx.items():
-            if ent.get("file_id") == file_id:
-                entry = ent
-                filename = fname
-                break
+    filename, entry = get_by_file_id(file_id)
     if not entry:
         context.user_data['untag_next_media'] = False
         await msg.reply_text("This media is not in the index. Untagging canceled.")
@@ -513,14 +507,25 @@ async def untag_media_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not pending:
         await query.edit_message_text("No media to untag.")
         return
+    file_id = pending['file_id']
     idx = load_index()
-    fname = pending['filename']
-    if fname in idx and "tags" in idx[fname] and tag in idx[fname]["tags"]:
-        idx[fname]["tags"].remove(tag)
-        save_index(idx)
-        await query.edit_message_text(f"Tag <code>{tag}</code> removed from <code>{fname}</code>.", parse_mode='HTML')
-    else:
-        await query.edit_message_text("Tag not found on this file.")
+    found = False
+
+    # Find the entry by file_id
+    for fname, entry in idx.items():
+        if entry.get("file_id") == file_id:
+            if "tags" in entry and tag in entry["tags"]:
+                entry["tags"].remove(tag)
+                save_index(idx)
+                await query.edit_message_text(f"Tag <code>{tag}</code> removed from <code>{fname}</code>.", parse_mode='HTML')
+            else:
+                await query.edit_message_text("Tag not found on this file.")
+            found = True
+            break
+
+    if not found:
+        await query.edit_message_text("File not found in index for untagging.")
+
     context.user_data['pending_untag_media'] = None
     await manage_tags_menu(update, context, send=True)
 
@@ -652,7 +657,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sent_num = 0
         for fname, entry in idx.items():
             if entry.get("file_type") == query_type:
-                file_entry = get_file_entry_by_filename(fname)
+                file_entry = get_by_filename(fname)
                 fpath =  file_entry["saved_path"]
                 sent = await send_file(context, chat_id, file_entry, fpath, fname)
                 if file_entry and sent:
@@ -704,7 +709,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=chat_id, text=f"Sending <code>{len(matched_files)}</code> files matching pattern: \n<code>{file_path}</code>", parse_mode='HTML')
         for fpath in matched_files:
             filename = os.path.basename(fpath)
-            file_entry = get_file_entry_by_filename(filename)
+            file_entry = get_by_filename(filename)
             sent = await send_file(context, chat_id, file_entry, fpath, filename)
             if file_entry and sent:
                 indexed += 1
@@ -726,7 +731,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=chat_id, text=f"Sending <code>{len(file_list)}</code> files from directory: \n<code>{file_path}</code>", parse_mode='HTML')
         for fpath in file_list:
             filename = os.path.basename(fpath)
-            file_entry = get_file_entry_by_filename(filename)
+            file_entry = get_by_filename(filename)
             sent = await send_file(context, chat_id, file_entry, fpath, filename)
             if file_entry and sent:
                 indexed += 1
@@ -736,7 +741,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # single file support
     elif os.path.isfile(file_path):
         filename = os.path.basename(file_path)
-        file_entry = get_file_entry_by_filename(filename)
+        file_entry = get_by_filename(filename)
         if file_entry:
             msg = await context.bot.send_message(chat_id=chat_id, text="File found in index, sending...")
             sent = await send_file(context, chat_id, file_entry, file_path, filename)
