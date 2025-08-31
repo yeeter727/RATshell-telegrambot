@@ -454,14 +454,16 @@ async def tag_media_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     context.user_data['pending_tag_media_batch'] = []
     context.user_data['tag_next_media'] = False
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Tagging mode canceled.")
+    await query.edit_message_text("Tagging mode canceled.")
     await manage_tags_menu(update, context)
 
 async def untag_media_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data['untag_next_media'] = True
-    await query.edit_message_text("Forward the file you want to untag.")
+    keyboard = [[InlineKeyboardButton("Cancel", callback_data='untag_media_cancel')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("Forward the file you want to untag.", reply_markup=reply_markup)
 
 async def untag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get('untag_next_media'):
@@ -484,7 +486,7 @@ async def untag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE
     tags = entry.get("tags", [])
     if not tags:
         context.user_data['untag_next_media'] = False
-        await msg.reply_text("This file has no tags to remove.")
+        await msg.reply_text("This file has no tags to remove. Untagging canceled.")
         return
     # Save info for callback
     context.user_data['pending_untag_media'] = {"filename": filename, "file_id": file_id}
@@ -510,7 +512,7 @@ async def untag_media_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.edit_message_text("Tag not found on this file.")
     context.user_data['pending_untag_media'] = None
-    await manage_tags_menu(update, context)
+    await manage_tags_menu(update, context, send=True)
 
 async def untag_media_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
