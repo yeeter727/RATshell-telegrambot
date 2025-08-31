@@ -487,6 +487,7 @@ async def untag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not tags:
         context.user_data['untag_next_media'] = False
         await msg.reply_text("This file has no tags to remove. Untagging canceled.")
+        await manage_tags_menu(update, context, send=True)
         return
     # Save info for callback
     context.user_data['pending_untag_media'] = {"filename": filename, "file_id": file_id}
