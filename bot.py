@@ -321,8 +321,8 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     tag_list = "\n".join(tags) if tags else "No tags yet."
     keyboard = [
         [InlineKeyboardButton("🔍 View Tagged", callback_data='view_tag'), InlineKeyboardButton("📎 Tag Media", callback_data='tag_media')],
-        [InlineKeyboardButton("➕ Create Tag", callback_data='add_tag'), InlineKeyboardButton("🗑️ Delete Tag", callback_data='delete_tag')],
-        [InlineKeyboardButton("◀️ Back", callback_data='go_back')]
+        [InlineKeyboardButton("➕ Create Tag", callback_data='add_tag'), InlineKeyboardButton("🏷️ Untag Media", callback_data='untag_media')],
+        [InlineKeyboardButton("◀️ Back", callback_data='go_back'), InlineKeyboardButton("🗑️ Delete Tag", callback_data='delete_tag')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if send:
@@ -457,6 +457,68 @@ async def tag_media_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Tagging mode canceled.")
     await manage_tags_menu(update, context)
 
+async def untag_media_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data['untag_next_media'] = True
+    await query.edit_message_text("Forward the file you want to untag.")
+
+async def untag_media_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.user_data.get('untag_next_media'):
+        return
+    msg = update.message
+    filename, file_type, file_id, file_size, file_unique_id = extract_file_info(msg)
+    idx = load_index()
+    entry = idx.get(filename)
+    if not entry:
+        # Optionally, try to match by file_id
+        for fname, ent in idx.items():
+            if ent.get("file_id") == file_id:
+                entry = ent
+                filename = fname
+                break
+    if not entry:
+        context.user_data['untag_next_media'] = False
+        await msg.reply_text("This media is not in the index. Untagging canceled.")
+        return
+    tags = entry.get("tags", [])
+    if not tags:
+        context.user_data['untag_next_media'] = False
+        await msg.reply_text("This file has no tags to remove.")
+        return
+    # Save info for callback
+    context.user_data['pending_untag_media'] = {"filename": filename, "file_id": file_id}
+    keyboard = [[InlineKeyboardButton(tag, callback_data=f'untag_media_apply_{tag}')] for tag in tags]
+    keyboard.append([InlineKeyboardButton("Cancel", callback_data='untag_media_cancel')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await msg.reply_text("Pick a tag to remove from this file:", reply_markup=reply_markup)
+    context.user_data['untag_next_media'] = False
+
+async def untag_media_apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    tag = query.data.replace('untag_media_apply_', '', 1)
+    pending = context.user_data.get('pending_untag_media')
+    if not pending:
+        await query.edit_message_text("No media to untag.")
+        return
+    idx = load_index()
+    fname = pending['filename']
+    if fname in idx and "tags" in idx[fname] and tag in idx[fname]["tags"]:
+        idx[fname]["tags"].remove(tag)
+        save_index(idx)
+        await query.edit_message_text(f"Tag <code>{tag}</code> removed from <code>{fname}</code>.", parse_mode='HTML')
+    else:
+        await query.edit_message_text("Tag not found on this file.")
+    context.user_data['pending_untag_media'] = None
+    await manage_tags_menu(update, context)
+
+async def untag_media_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    context.user_data['pending_untag_media'] = None
+    context.user_data['untag_next_media'] = False
+    await query.edit_message_text("Untagging canceled.")
+    await manage_tags_menu(update, context)
+
 async def view_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -489,21 +551,6 @@ async def view_tag_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_file(context, chat_id, entry, file_path, fname)
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sent <code>{len(matched_files)}</code> files with tag <code>{tag}</code>.", parse_mode='HTML')
     await manage_tags_menu(update, context, send=True)
-
-async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Check if waiting for tag input
-    if context.user_data.get('awaiting_new_tag'):
-        await add_tag_receive(update, context)
-        return
-    # Otherwise treat as a shell command
-    await handle_shell_commands(update, context)
-
-async def media_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get('tag_next_media'):
-        await tag_media_receive(update, context)
-        return
-    # Default: handle as a normal upload
-    await handle_upload(update, context)
 
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unsolicited message"):
@@ -804,6 +851,24 @@ async def stop_deleting_callback(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     await query.edit_message_text("Stopped deletion mode.")
 
+async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Check if waiting for tag input
+    if context.user_data.get('awaiting_new_tag'):
+        await add_tag_receive(update, context)
+        return
+    # Otherwise treat as a shell command
+    await handle_shell_commands(update, context)
+
+async def media_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get('tag_next_media'):
+        await tag_media_receive(update, context)
+        return
+    if context.user_data.get('untag_next_media'):
+        await untag_media_receive(update, context)
+        return
+    # Default: handle as a normal upload
+    await handle_upload(update, context)
+
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unknown bot command"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
@@ -821,13 +886,16 @@ if __name__ == '__main__':
     # tag handlers
     app.add_handler(CallbackQueryHandler(manage_tags_menu, pattern="manage_tags"))
     app.add_handler(CallbackQueryHandler(add_tag_prompt, pattern="add_tag"))
-    app.add_handler(CallbackQueryHandler(delete_tag_prompt, pattern="delete_tag"))
-    app.add_handler(CallbackQueryHandler(delete_tag_confirm, pattern="del_tag_"))
+    app.add_handler(CallbackQueryHandler(delete_tag_prompt, pattern="^delete_tag"))
+    app.add_handler(CallbackQueryHandler(delete_tag_confirm, pattern="^del_tag_"))
     app.add_handler(CallbackQueryHandler(tag_media_apply, pattern="^tag_media_apply_"))
-    app.add_handler(CallbackQueryHandler(tag_media_cancel, pattern="tag_media_cancel"))
-    app.add_handler(CallbackQueryHandler(tag_media_prompt, pattern="tag_media"))
+    app.add_handler(CallbackQueryHandler(tag_media_cancel, pattern="^tag_media_cancel"))
+    app.add_handler(CallbackQueryHandler(tag_media_prompt, pattern="^tag_media"))
     app.add_handler(CallbackQueryHandler(view_tag_files, pattern="^view_tag_"))
     app.add_handler(CallbackQueryHandler(view_tag_prompt, pattern="^view_tag$"))
+    app.add_handler(CallbackQueryHandler(untag_media_apply, pattern="^untag_media_apply_"))
+    app.add_handler(CallbackQueryHandler(untag_media_cancel, pattern="^untag_media_cancel"))
+    app.add_handler(CallbackQueryHandler(untag_media_prompt, pattern="untag_media"))
 
     app.add_handler(CallbackQueryHandler(stop_deleting_callback, pattern="stop_deleting"))
     app.add_handler(CallbackQueryHandler(button_handler))
