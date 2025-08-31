@@ -318,7 +318,16 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, s
         send_func = update.message.reply_text
 
     tags = load_tags()
-    tag_list = "\n".join(tags) if tags else "No tags yet."
+    idx = load_index()
+    if tags:
+        tag_counts = {tag: 0 for tag in tags}
+        for entry in idx.values():
+            for tag in entry.get("tags", []):
+                if tag in tag_counts:
+                    tag_counts[tag] += 1
+        tag_list = "\n".join(f"<code>{tag}</code>: <b>{tag_counts[tag]}</b>" for tag in tags)
+    else:
+        tag_list = "No tags yet."
     keyboard = [
         [InlineKeyboardButton("🔍 View Tagged", callback_data='view_tag'), InlineKeyboardButton("📎 Tag Media", callback_data='tag_media')],
         [InlineKeyboardButton("➕ Create Tag", callback_data='add_tag'), InlineKeyboardButton("🏷️ Untag Media", callback_data='untag_media')],
@@ -326,9 +335,9 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if send:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Available tags:\n<code>{tag_list}</code>", reply_markup=reply_markup, parse_mode='HTML')
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Available tags:\n{tag_list}", reply_markup=reply_markup, parse_mode='HTML')
     else:
-        await send_func(text=f"Available tags:\n<code>{tag_list}</code>", reply_markup=reply_markup, parse_mode='HTML')
+        await send_func(text=f"Available tags:\n{tag_list}", reply_markup=reply_markup, parse_mode='HTML')
 
 async def add_tag_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
