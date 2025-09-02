@@ -36,9 +36,9 @@ except NameError:
     bot_download_limit = 20970496
     tags_file = "tags.json"
 try:
-    pot
+    testserver
 except NameError:
-    pot = False
+    testserver = False
 
 # create access_log if not found
 if not os.path.exists(access_log):
@@ -602,15 +602,15 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
             if file_type == "document":
                 await context.bot.send_document(chat_id=chat_id, document=file_id)
             elif file_type == "photo":
-                await context.bot.send_photo(chat_id=chat_id, photo=file_id, has_spoiler=pot)
+                await context.bot.send_photo(chat_id=chat_id, photo=file_id, has_spoiler=testserver)
             elif file_type == "video":
-                await context.bot.send_video(chat_id=chat_id, video=file_id, has_spoiler=pot)
+                await context.bot.send_video(chat_id=chat_id, video=file_id, has_spoiler=testserver)
             elif file_type == "audio":
                 await context.bot.send_audio(chat_id=chat_id, audio=file_id)
             elif file_type == "voice":
                 await context.bot.send_voice(chat_id=chat_id, voice=file_id)
             elif file_type == "animation":
-                await context.bot.send_animation(chat_id=chat_id, animation=file_id, has_spoiler=pot)
+                await context.bot.send_animation(chat_id=chat_id, animation=file_id, has_spoiler=testserver)
             elif file_type == "sticker":
                 await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
             sent = True
@@ -622,15 +622,15 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
             with open(file_path, "rb") as f:
                 if file_entry:
                     if file_type == "photo":
-                        await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=pot)
+                        await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=testserver)
                     elif file_type == "video":
-                        await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=pot)
+                        await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=testserver)
                     elif file_type == "audio":
                         await context.bot.send_audio(chat_id=chat_id, audio=f)
                     elif file_type == "voice":
                         await context.bot.send_voice(chat_id=chat_id, voice=f)
                     elif file_type == "animation":
-                        await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=pot)
+                        await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=testserver)
                     elif file_type == "sticker":
                         await context.bot.send_sticker(chat_id=chat_id, sticker=f)
                     else:
@@ -649,7 +649,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not context.args:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \nGet everything in a folder:\n<code>/get path/to/dir/</code> \nBy type: <code>/get -t video</code> \nFor info: <code>/get -i</code>\n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
-        if not pot:
+        if not testserver:
             file_path = os.path.normpath(upload_folder)
         else:
             return
