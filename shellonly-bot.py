@@ -34,7 +34,7 @@ def is_owner(update, action):
         username = update.effective_user.username
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [{action}] User @{username}")
+            f.write(f"\n[{now}] [{action}] User @{username} ID: {user_id}")
         return False
     else:
         return True
