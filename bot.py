@@ -217,6 +217,9 @@ if win:
         fastfetch = True
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# delete/comment the following line if you want to log all http requests
+logging.getLogger("httpx").setLevel(logging.WARNING)
 ###########################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -915,3 +918,4 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
 
     app.run_polling()
+
