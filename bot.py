@@ -28,6 +28,11 @@ else:
     print("Missing required tg.conf file.")
     exit()
 
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# comment the following line if you want to log all http requests
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 # (lazy) config fix
 try:
     bot_download_limit
@@ -48,6 +53,7 @@ if not os.path.exists(access_log):
             "UNAUTHORIZED ACTION LOG\n"
             "#######################"
         )
+    logging.info("Created access_log file.")
 
 # check if user is the owner
 def is_owner(update, action):
@@ -57,6 +63,7 @@ def is_owner(update, action):
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             f.write(f"\n[{now}] [{action}] User @{username} ID: {user_id}")
+        logging.warning("Unauthorized user logged.")
         return False
     else:
         return True
@@ -92,6 +99,7 @@ def add_file_to_index(file_id, filename, file_type, saved_path, file_size_MB):
         "date_saved": datetime.now().isoformat()
     }
     save_index(idx)
+    logging.info("Added a file to the index.")
 
 def get_by_filename(filename):
     idx = load_index()
@@ -200,6 +208,7 @@ win = in_windows()
 
 # install fastfetch if running in win and not already installed
 if win:
+    logging.info("Windows detected. Checking for fastfetch command...")
     winget_list = subprocess.run(["winget", "list", "Fastfetch-cli.Fastfetch"], capture_output=True, text=True, timeout=10)
     if not "Fastfetch-cli.Fastfetch" in winget_list.stdout:
         print("\nFastfetch is not installed (needed for the 'Run Neofetch' button).")
@@ -216,16 +225,13 @@ if win:
     else:
         fastfetch = True
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-# delete/comment the following line if you want to log all http requests
-logging.getLogger("httpx").setLevel(logging.WARNING)
 ###########################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/start"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
         return
+    logging.info("Command /start used.")
 
     keyboard = [
         [InlineKeyboardButton("📡 Get IP Info", callback_data='get_ip')],
@@ -324,6 +330,7 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     if not is_owner(update, "/tags"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
+    logging.info("Command /tags used.")
     # Handles displaying the main tag management menu
     query = update.callback_query
     if query:
@@ -593,6 +600,7 @@ async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TY
             if not output.strip():
                 output = "✓"  # send a checkmark if there is no output from the command
             await context.bot.send_message(chat_id=update.effective_chat.id, text=output)
+            logging.info(f"Shell command executed: {command}")
         except Exception as e:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
 
@@ -648,6 +656,10 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/get"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
+    if not context.args:
+        logging.info(f"Command /get used.")
+    else:
+        logging.info(f"Command /get used: {context.args}")
 
     chat_id = update.effective_chat.id
     if not context.args:
@@ -885,7 +897,22 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Invalid bot command. \nTry /start or /get")
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(bot_token).build()
+
+    # function to replace placeholders in the start message
+    async def parse_start_message(app):
+        try:
+            chat = await app.bot.get_chat(owner_id)
+            username = "@" + str(chat.username) or f"{chat.first_name or ''} {chat.last_name or ''}".strip()
+            if username:
+                globals()['start_message'] = start_message.replace("OWNER_USERNAME", username)
+                globals()['start_message'] = start_message.replace("OWNER_ID", str(owner_id))
+                logging.info("Replaced placholders in the start message.")
+            else:
+                logging.warning("Owner chat returned no username/name.")
+        except Exception as e:
+            logging.warning("Could not fetch owner username at startup: %s", e)
+
+    app = ApplicationBuilder().token(bot_token).post_init(parse_start_message).build()
 
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tags', manage_tags_menu))
@@ -918,4 +945,3 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
 
     app.run_polling()
-
