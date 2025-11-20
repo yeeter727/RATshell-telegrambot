@@ -10,6 +10,7 @@ import json
 import glob
 import unicodedata
 import re
+import getpass
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
@@ -99,7 +100,7 @@ def add_file_to_index(file_id, filename, file_type, saved_path, file_size_MB):
         "date_saved": datetime.now().isoformat()
     }
     save_index(idx)
-    logging.info("Added a file to the index.")
+    logging.info(f"Added a {file_type} file to the index.")
 
 def get_by_filename(filename):
     idx = load_index()
@@ -240,7 +241,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🏷️ Manage Media Tags", callback_data='manage_tags')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(start_message, reply_markup=reply_markup)
+    await update.message.reply_text(start_message, reply_markup=reply_markup, parse_mode='HTML')
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -324,7 +325,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🏷️ Manage Media Tags", callback_data='manage_tags')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(text=start_message, reply_markup=reply_markup)
+        await query.edit_message_text(text=start_message, reply_markup=reply_markup, parse_mode='HTML')
 
 async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send=False):
     if not is_owner(update, "/tags"):
@@ -902,15 +903,22 @@ if __name__ == '__main__':
     async def parse_start_message(app):
         try:
             chat = await app.bot.get_chat(owner_id)
-            username = "@" + str(chat.username) or f"{chat.first_name or ''} {chat.last_name or ''}".strip()
-            if username:
-                globals()['start_message'] = start_message.replace("OWNER_USERNAME", username)
-                globals()['start_message'] = start_message.replace("OWNER_ID", str(owner_id))
-                logging.info("Replaced placholders in the start message.")
-            else:
+            owner_un = "@" + str(chat.username) or f"{chat.first_name or ''} {chat.last_name or ''}".strip()
+            if not owner_un:
                 logging.warning("Owner chat returned no username/name.")
         except Exception as e:
             logging.warning("Could not fetch owner username at startup: %s", e)
+        
+        pwd = "<code>" + os.getcwd() + "</code>"
+        os_user = "<code>" + str(getpass.getuser()) + "</code>"
+        hostname = "<code>" + str(socket.gethostname()) + "</code>"
+
+        globals()['start_message'] = start_message.replace("OWNER_USERNAME", owner_un)
+        globals()['start_message'] = start_message.replace("OWNER_ID", str(owner_id))
+        globals()['start_message'] = start_message.replace("WORKING_DIR", pwd)
+        globals()['start_message'] = start_message.replace("OS_USER", os_user)
+        globals()['start_message'] = start_message.replace("OS_HOSTNAME", hostname)
+        logging.info("Replaced placholders in the start message.")
 
     app = ApplicationBuilder().token(bot_token).post_init(parse_start_message).build()
 
