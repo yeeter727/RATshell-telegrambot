@@ -39,10 +39,10 @@ if not os.path.exists(access_log):
 def is_owner(update, action):
     user_id = update.effective_user.id
     if user_id != owner_id:
-        username = update.effective_user.username or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
+        username = "@" + str(update.effective_user.username) or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [{action}] User @{username} ID: {user_id}")
+            f.write(f"\n[{now}] [{action}] User {username} ID: {user_id}")
         logging.warning(f"Unauthorized user logged: {username}")
         return False
     else:
@@ -115,3 +115,4 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('start', start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))    # read messages as commands
     app.run_polling()
+
