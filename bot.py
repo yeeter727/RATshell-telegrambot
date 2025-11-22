@@ -60,11 +60,11 @@ if not os.path.exists(access_log):
 def is_owner(update, action):
     user_id = update.effective_user.id
     if user_id != owner_id:
-        username = update.effective_user.username
+        username = update.effective_user.username or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             f.write(f"\n[{now}] [{action}] User @{username} ID: {user_id}")
-        logging.warning("Unauthorized user logged.")
+        logging.warning(f"Unauthorized user logged: {username}")
         return False
     else:
         return True
@@ -897,29 +897,36 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Invalid bot command. \nTry /start or /get")
 
-if __name__ == '__main__':
 
-    # function to replace placeholders in the start message
-    async def parse_start_message(app):
-        try:
-            chat = await app.bot.get_chat(owner_id)
-            owner_un = "@" + str(chat.username) or f"{chat.first_name or ''} {chat.last_name or ''}".strip()
-            if not owner_un:
-                logging.warning("Owner chat returned no username/name.")
-        except Exception as e:
-            logging.warning("Could not fetch owner username at startup: %s", e)
-        
-        pwd = "<code>" + os.getcwd() + "</code>"
-        os_user = "<code>" + str(getpass.getuser()) + "</code>"
-        hostname = "<code>" + str(socket.gethostname()) + "</code>"
+# function to replace placeholders in the start message
+async def parse_start_message(app):
+    try:
+        chat = await app.bot.get_chat(owner_id)
+        owner_un = "@" + str(chat.username) or f"{chat.first_name or ''} {chat.last_name or ''}".strip()
+        if not owner_un:
+            logging.warning("Owner chat returned no username/name.")
+    except Exception as e:
+        logging.warning("Could not fetch owner username at startup: %s", e)
+    
+    pwd = "<code>" + os.getcwd() + "</code>"
+    os_user = "<code>" + str(getpass.getuser()) + "</code>"
+    hostname = "<code>" + str(socket.gethostname()) + "</code>"
 
-        globals()['start_message'] = start_message.replace("OWNER_USERNAME", owner_un)
-        globals()['start_message'] = start_message.replace("OWNER_ID", str(owner_id))
-        globals()['start_message'] = start_message.replace("WORKING_DIR", pwd)
-        globals()['start_message'] = start_message.replace("OS_USER", os_user)
-        globals()['start_message'] = start_message.replace("OS_HOSTNAME", hostname)
+    original = start_message
+
+    # changes at runtime, doesn't actually edit tg.conf
+    globals()['start_message'] = start_message.replace("OWNER_USERNAME", owner_un)
+    globals()['start_message'] = start_message.replace("OWNER_ID", str(owner_id))
+    globals()['start_message'] = start_message.replace("WORKING_DIR", pwd)
+    globals()['start_message'] = start_message.replace("OS_USER", os_user)
+    globals()['start_message'] = start_message.replace("OS_HOSTNAME", hostname)
+
+    # only log if something actually changed
+    if start_message != original:
         logging.info("Replaced placholders in the start message.")
 
+
+if __name__ == '__main__':
     app = ApplicationBuilder().token(bot_token).post_init(parse_start_message).build()
 
     app.add_handler(CommandHandler('start', start))
