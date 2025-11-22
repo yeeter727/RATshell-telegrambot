@@ -238,7 +238,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📡 Get IP Info", callback_data='get_ip')],
         [InlineKeyboardButton("🖥 Neofetch", callback_data='run_neofetch')],
         [InlineKeyboardButton("📄 Print Access Log", callback_data='print_log')],
-        [InlineKeyboardButton("🏷️ Manage Media Tags", callback_data='manage_tags')]
+        [InlineKeyboardButton("📂 Manage Uploaded Files", callback_data='manage_files')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(start_message, reply_markup=reply_markup, parse_mode='HTML')
@@ -322,16 +322,317 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("📡 Get IP Info", callback_data='get_ip')],
             [InlineKeyboardButton("🖥 Neofetch", callback_data='run_neofetch')],
             [InlineKeyboardButton("📄 Print Access Log", callback_data='print_log')],
-            [InlineKeyboardButton("🏷️ Manage Media Tags", callback_data='manage_tags')]
+            [InlineKeyboardButton("📂 Manage Uploaded Files", callback_data='manage_files')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=start_message, reply_markup=reply_markup, parse_mode='HTML')
 
-async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send=False):
-    if not is_owner(update, "/tags"):
+async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send: bool = False):
+    """
+    Shows information about the upload index.
+    Can be invoked as /manage or via the button menu.
+    """
+    if not is_owner(update, "/manage"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
-    logging.info("Command /tags used.")
+    logging.info("Command /manage used.")
+    query = update.callback_query
+    if query:
+        await query.answer()
+        send_func = query.edit_message_text
+    else:
+        send_func = update.message.reply_text
+
+    idx = load_index()
+
+    total_files = len(idx)
+    total_downloaded = 0
+    type_counts = {}
+    total_storage_MB = 0.0
+    for fname, entry in idx.items():
+        t = entry.get("file_type", "unknown")
+        type_counts[t] = type_counts.get(t, 0) + 1
+        # only count files that are not .tglink (placeholders)
+        if not fname.endswith(".tglink"):
+            # entry["file_size"] is a string like "3.2MB"
+            total_downloaded += 1
+            size_str = entry.get("file_size", "0MB")
+            try:
+                total_storage_MB += float(size_str.replace("MB", ""))
+            except Exception:
+                pass
+    lines = [
+        f"Total files in index: <b>{total_files}</b>",
+        f"Indexed files on disk: <b>{total_downloaded}</b>",
+        "File types indexed:"
+    ]
+    for t, count in sorted(type_counts.items(), key=lambda x: x[1], reverse=True):
+        lines.append(f"  <code>{t}</code>: <b>{count}</b>")
+    lines.append(f"\nStorage used: <b>{total_storage_MB:.2f} MB</b>")
+    
+    keyboard = [
+        [InlineKeyboardButton("🗄 View uploaded files (/get)", callback_data='get_file')],
+        [InlineKeyboardButton("🗑 Select files to remove (/remove)", callback_data='remove_file')],
+        [InlineKeyboardButton("◀️ Back", callback_data='go_back'), InlineKeyboardButton("🏷️ Manage Media Tags", callback_data='manage_tags')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if send:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="\n".join(lines), reply_markup=reply_markup, parse_mode='HTML')
+    else:
+        await send_func(text="\n".join(lines), reply_markup=reply_markup, parse_mode='HTML')
+
+async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update, "Unsolicited message"):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        return
+    else:
+        command = update.message.text.strip()  # Get the command from the message
+        try:
+            if win:
+                result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+                output = result.stdout.decode('utf-8')
+            else:
+                result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                output = result.stdout.decode('utf-8')
+            if not output.strip():
+                output = "✓"  # send a checkmark if there is no output from the command
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=output)
+            logging.info(f"Shell command executed: {command}")
+        except Exception as e:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
+
+async def send_file(context, chat_id, file_entry, file_path, filename):
+    sent = False
+    if file_entry:
+        file_id = file_entry["file_id"]
+        file_type = file_entry["file_type"]
+        try:
+            if file_type == "document":
+                await context.bot.send_document(chat_id=chat_id, document=file_id)
+            elif file_type == "photo":
+                await context.bot.send_photo(chat_id=chat_id, photo=file_id, has_spoiler=testserver)
+            elif file_type == "video":
+                await context.bot.send_video(chat_id=chat_id, video=file_id, has_spoiler=testserver)
+            elif file_type == "audio":
+                await context.bot.send_audio(chat_id=chat_id, audio=file_id)
+            elif file_type == "voice":
+                await context.bot.send_voice(chat_id=chat_id, voice=file_id)
+            elif file_type == "animation":
+                await context.bot.send_animation(chat_id=chat_id, animation=file_id, has_spoiler=testserver)
+            elif file_type == "sticker":
+                await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
+            sent = True
+        except Exception as e:
+            await context.bot.send_message(chat_id=chat_id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
+    if not sent:
+        try:
+            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
+            with open(file_path, "rb") as f:
+                if file_entry:
+                    if file_type == "photo":
+                        await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=testserver)
+                    elif file_type == "video":
+                        await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=testserver)
+                    elif file_type == "audio":
+                        await context.bot.send_audio(chat_id=chat_id, audio=f)
+                    elif file_type == "voice":
+                        await context.bot.send_voice(chat_id=chat_id, voice=f)
+                    elif file_type == "animation":
+                        await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=testserver)
+                    elif file_type == "sticker":
+                        await context.bot.send_sticker(chat_id=chat_id, sticker=f)
+                    else:
+                        await context.bot.send_document(chat_id=chat_id, document=f)
+                else:
+                    await context.bot.send_document(chat_id=chat_id, document=f)
+        except Exception as e:
+            await context.bot.send_message(chat_id=chat_id, text=f"Failed to send file {filename}: {e}")
+    return sent
+
+async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update, "/get"):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        return
+    query = update.callback_query
+    if query:
+        await query.answer()
+    if not context.args:
+        logging.info(f"Command /get used.")
+    else:
+        logging.info(f"Command /get used: {context.args}")
+
+    chat_id = update.effective_chat.id
+    if not context.args:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \nGet everything in a folder:\n<code>/get path/to/dir/</code> \nBy type: <code>/get -t video</code> \n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
+        if not testserver:
+            file_path = os.path.normpath(upload_folder)
+        else:
+            return
+    elif context.args[0] and context.args[0] == "-t":
+        if len(context.args) < 2:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Specify a file type: \n<code>/get -t video</code> \n\nAll file types: \n<code>photo, video, audio, voice, document, animation, sticker</code>", parse_mode='HTML')
+            return
+        query_type = context.args[1]
+        idx = load_index()
+        sent_num = 0
+        for fname, entry in idx.items():
+            if entry.get("file_type") == query_type:
+                file_entry = get_by_filename(fname)
+                fpath =  file_entry["saved_path"]
+                sent = await send_file(context, chat_id, file_entry, fpath, fname)
+                if file_entry and sent:
+                    sent_num += 1
+        if sent_num > 0:
+            await context.bot.send_message(chat_id=chat_id, text=f"Sent <code>{sent_num}</code> files by type: <code>{query_type}</code>", parse_mode='HTML')
+        else:
+            await context.bot.send_message(chat_id=chat_id, text=f"No files by type <code>{query_type}</code> were found in the index.", parse_mode='HTML')
+            return
+    else:
+        file_path = os.path.normpath(" ".join(context.args))
+
+    # wildcard support
+    if any(char in file_path for char in ['*', '?', '[']):
+        matched_files = [f for f in glob.glob(file_path) if os.path.isfile(f)]
+        if not matched_files:
+            await context.bot.send_message(chat_id=chat_id, text="No files match that pattern.")
+            return
+
+        indexed = 0
+        await context.bot.send_message(chat_id=chat_id, text=f"Sending <code>{len(matched_files)}</code> files matching pattern: \n<code>{file_path}</code>", parse_mode='HTML')
+        for fpath in matched_files:
+            filename = os.path.basename(fpath)
+            file_entry = get_by_filename(filename)
+            sent = await send_file(context, chat_id, file_entry, fpath, filename)
+            if file_entry and sent:
+                indexed += 1
+        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(matched_files)}</code> files were in the upload index.", parse_mode='HTML')
+        return
+
+    # directory support
+    if os.path.isdir(file_path):
+        file_list = [
+            os.path.join(file_path, f)
+            for f in os.listdir(file_path)
+            if os.path.isfile(os.path.join(file_path, f))
+        ]
+        if not file_list:
+            await context.bot.send_message(chat_id=chat_id, text="Directory is empty.")
+            return
+
+        indexed = 0
+        await context.bot.send_message(chat_id=chat_id, text=f"Sending <code>{len(file_list)}</code> files from directory: \n<code>{file_path}</code>", parse_mode='HTML')
+        for fpath in file_list:
+            filename = os.path.basename(fpath)
+            file_entry = get_by_filename(filename)
+            sent = await send_file(context, chat_id, file_entry, fpath, filename)
+            if file_entry and sent:
+                indexed += 1
+        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(file_list)}</code> files were in the upload index.", parse_mode='HTML')
+        return
+
+    # single file support
+    elif os.path.isfile(file_path):
+        filename = os.path.basename(file_path)
+        file_entry = get_by_filename(filename)
+        if file_entry:
+            msg = await context.bot.send_message(chat_id=chat_id, text="File found in index, sending...")
+            sent = await send_file(context, chat_id, file_entry, file_path, filename)
+            await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
+        else:
+            await send_file(context, chat_id, None, file_path, filename)
+        return
+
+    else:
+        await context.bot.send_message(chat_id=chat_id, text="File or directory not found.")
+        return
+
+async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update, "Sent file"):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        return
+    
+    filename, file_type, file_id, file_size, file_unique_id = extract_file_info(update.message)
+    file_info = None
+
+    idx = load_index()
+    if context.user_data.get('remove_next'):
+        # remove by file ID first
+        to_remove = None
+        for fname, entry in idx.items():
+            if entry.get("file_id") == file_id:
+                to_remove = fname
+                break
+        if to_remove:
+            entry = idx.pop(to_remove)
+            save_index(idx)
+            try:
+                if os.path.exists(entry["saved_path"]):
+                    os.remove(entry["saved_path"])
+                msg = f"File <code>{to_remove}</code> removed from index and disk (by file ID)."
+            except Exception as e:
+                msg = f"Removed from index, but failed to delete file: \n{e}"
+        else:
+            msg = "File not found in index (by file ID)."
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode='HTML', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Stop deleting", callback_data='stop_deleting')]]))
+        return
+
+    elif filename and file_id and file_type and file_size is not None:
+        if filename in idx or any(entry["file_id"] == file_id for entry in idx.values()):
+            if any(entry["file_id"] == file_id for entry in idx.values()):
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{filename}</code> was already in the index.", parse_mode='HTML')
+                return
+            else:
+                filename = normalize_filename(filename)
+                filename = f"{file_unique_id}_{filename}"
+        file_size_MB = round(file_size / 1000000, 2)
+        download_limit_MB = round(bot_download_limit / 1000000, 2)
+        filename = normalize_filename(filename)
+
+        if file_size > bot_download_limit:
+            # too large for Telegram bot download, create .tglink placeholder
+            save_path = os.path.join(upload_folder, f"{filename}.tglink")
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+            placeholder = {
+                "filename": filename,
+                "file_id": file_id,
+                "file_type": file_type,
+                "file_size": f"{file_size_MB}MB",
+                "download_limit": f"{download_limit_MB}MB",
+                "date_saved": datetime.now().isoformat(),
+                "note": "File size exceeds Telegram bot download limit. This placeholder is necessary for the file to be sent properly. Data in this file is for your reference, as it is nearly a copy of the index entry."
+            }
+
+            with open(save_path, "w") as f:
+                json.dump(placeholder, f, indent=2)
+            add_file_to_index(file_id, f"{filename}.tglink", file_type, save_path, file_size_MB)
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File is too large for Telegram bot download. Indexed and placeholder created:\n<code>{save_path}</code>", parse_mode='HTML')
+            return
+
+        # report error if file is still too large
+        try: 
+            file_info = await context.bot.get_file(file_id)
+            save_path = os.path.join(upload_folder, filename)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
+            await file_info.download_to_drive(save_path)
+            add_file_to_index(file_id, filename, file_type, save_path, file_size_MB)
+            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"{file_type.capitalize()} saved: \n<code>{save_path}</code>", parse_mode='HTML')
+        except Exception as e:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n<code>{str(e)}</code> \n\nFile type: {file_type} \nDownload limit: {download_limit_MB}MB \nFile size: {file_size_MB}MB \nFile info: {file_info}", parse_mode='HTML')
+    else:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
+
+
+### file tagging functionality
+async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send=False):
+    """
+    Manages file tagging of indexed files.
+    """
+    if not is_owner(update, "Tag management menu"):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        return
     # Handles displaying the main tag management menu
     query = update.callback_query
     if query:
@@ -354,7 +655,7 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     keyboard = [
         [InlineKeyboardButton("🔍 View Tagged", callback_data='view_tag'), InlineKeyboardButton("📎 Tag Media", callback_data='tag_media')],
         [InlineKeyboardButton("➕ Create Tag", callback_data='add_tag'), InlineKeyboardButton("🏷️ Untag Media", callback_data='untag_media')],
-        [InlineKeyboardButton("◀️ Back", callback_data='go_back'), InlineKeyboardButton("🗑️ Delete Tag", callback_data='delete_tag')]
+        [InlineKeyboardButton("◀️ Back", callback_data='manage_files'), InlineKeyboardButton("🗑️ Delete Tag", callback_data='delete_tag')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if send:
@@ -585,277 +886,14 @@ async def view_tag_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Sent <code>{len(matched_files)}</code> files with tag <code>{tag}</code>.", parse_mode='HTML')
     await manage_tags_menu(update, context, send=True)
 
-async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_owner(update, "Unsolicited message"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
-        return
-    else:
-        command = update.message.text.strip()  # Get the command from the message
-        try:
-            if win:
-                result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
-                output = result.stdout.decode('utf-8')
-            else:
-                result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                output = result.stdout.decode('utf-8')
-            if not output.strip():
-                output = "✓"  # send a checkmark if there is no output from the command
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=output)
-            logging.info(f"Shell command executed: {command}")
-        except Exception as e:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error: {str(e)}")
-
-async def send_file(context, chat_id, file_entry, file_path, filename):
-    sent = False
-    if file_entry:
-        file_id = file_entry["file_id"]
-        file_type = file_entry["file_type"]
-        try:
-            if file_type == "document":
-                await context.bot.send_document(chat_id=chat_id, document=file_id)
-            elif file_type == "photo":
-                await context.bot.send_photo(chat_id=chat_id, photo=file_id, has_spoiler=testserver)
-            elif file_type == "video":
-                await context.bot.send_video(chat_id=chat_id, video=file_id, has_spoiler=testserver)
-            elif file_type == "audio":
-                await context.bot.send_audio(chat_id=chat_id, audio=file_id)
-            elif file_type == "voice":
-                await context.bot.send_voice(chat_id=chat_id, voice=file_id)
-            elif file_type == "animation":
-                await context.bot.send_animation(chat_id=chat_id, animation=file_id, has_spoiler=testserver)
-            elif file_type == "sticker":
-                await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
-            sent = True
-        except Exception as e:
-            await context.bot.send_message(chat_id=chat_id, text=f"Sending by file ID failed for {filename}, sending from disk. Error: {e}")
-    if not sent:
-        try:
-            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
-            with open(file_path, "rb") as f:
-                if file_entry:
-                    if file_type == "photo":
-                        await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=testserver)
-                    elif file_type == "video":
-                        await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=testserver)
-                    elif file_type == "audio":
-                        await context.bot.send_audio(chat_id=chat_id, audio=f)
-                    elif file_type == "voice":
-                        await context.bot.send_voice(chat_id=chat_id, voice=f)
-                    elif file_type == "animation":
-                        await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=testserver)
-                    elif file_type == "sticker":
-                        await context.bot.send_sticker(chat_id=chat_id, sticker=f)
-                    else:
-                        await context.bot.send_document(chat_id=chat_id, document=f)
-                else:
-                    await context.bot.send_document(chat_id=chat_id, document=f)
-        except Exception as e:
-            await context.bot.send_message(chat_id=chat_id, text=f"Failed to send file {filename}: {e}")
-    return sent
-
-async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_owner(update, "/get"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
-        return
-    if not context.args:
-        logging.info(f"Command /get used.")
-    else:
-        logging.info(f"Command /get used: {context.args}")
-
-    chat_id = update.effective_chat.id
-    if not context.args:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \nGet everything in a folder:\n<code>/get path/to/dir/</code> \nBy type: <code>/get -t video</code> \nFor info: <code>/get -i</code>\n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
-        if not testserver:
-            file_path = os.path.normpath(upload_folder)
-        else:
-            return
-    elif context.args[0] and context.args[0] == "-t":
-        if len(context.args) < 2:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Specify a file type: \n<code>/get -t video</code> \n\nAll file types: \n<code>photo, video, audio, voice, document, animation, sticker</code>", parse_mode='HTML')
-            return
-        query_type = context.args[1]
-        idx = load_index()
-        sent_num = 0
-        for fname, entry in idx.items():
-            if entry.get("file_type") == query_type:
-                file_entry = get_by_filename(fname)
-                fpath =  file_entry["saved_path"]
-                sent = await send_file(context, chat_id, file_entry, fpath, fname)
-                if file_entry and sent:
-                    sent_num += 1
-        if sent_num > 0:
-            await context.bot.send_message(chat_id=chat_id, text=f"Sent <code>{sent_num}</code> files by type: <code>{query_type}</code>", parse_mode='HTML')
-        else:
-            await context.bot.send_message(chat_id=chat_id, text=f"No files by type <code>{query_type}</code> were found in the index.", parse_mode='HTML')
-            return
-    elif context.args[0] and context.args[0] == "-i":
-        idx = load_index()
-        total_files = len(idx)
-        total_downloaded = 0
-        type_counts = {}
-        total_storage_MB = 0.0
-        for fname, entry in idx.items():
-            t = entry.get("file_type", "unknown")
-            type_counts[t] = type_counts.get(t, 0) + 1
-            # only count files that are not .tglink (placeholders)
-            if not fname.endswith(".tglink"):
-                # entry["file_size"] is a string like "3.2MB"
-                total_downloaded += 1
-                size_str = entry.get("file_size", "0MB")
-                try:
-                    total_storage_MB += float(size_str.replace("MB", ""))
-                except Exception:
-                    pass
-        lines = [
-            f"Total files in index: <b>{total_files}</b>",
-            f"Files downloaded: <b>{total_downloaded}</b>",
-            "File types indexed:"
-        ]
-        for t, count in sorted(type_counts.items(), key=lambda x: x[1], reverse=True):
-            lines.append(f"  <code>{t}</code>: <b>{count}</b>")
-        lines.append(f"\nStorage used: <b>{total_storage_MB:.2f} MB</b>")
-        await context.bot.send_message(chat_id=chat_id, text="\n".join(lines), parse_mode='HTML')
-        return
-    else:
-        file_path = os.path.normpath(" ".join(context.args))
-
-    # wildcard support
-    if any(char in file_path for char in ['*', '?', '[']):
-        matched_files = [f for f in glob.glob(file_path) if os.path.isfile(f)]
-        if not matched_files:
-            await context.bot.send_message(chat_id=chat_id, text="No files match that pattern.")
-            return
-
-        indexed = 0
-        await context.bot.send_message(chat_id=chat_id, text=f"Sending <code>{len(matched_files)}</code> files matching pattern: \n<code>{file_path}</code>", parse_mode='HTML')
-        for fpath in matched_files:
-            filename = os.path.basename(fpath)
-            file_entry = get_by_filename(filename)
-            sent = await send_file(context, chat_id, file_entry, fpath, filename)
-            if file_entry and sent:
-                indexed += 1
-        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(matched_files)}</code> files were in the upload index.", parse_mode='HTML')
-        return
-
-    # directory support
-    if os.path.isdir(file_path):
-        file_list = [
-            os.path.join(file_path, f)
-            for f in os.listdir(file_path)
-            if os.path.isfile(os.path.join(file_path, f))
-        ]
-        if not file_list:
-            await context.bot.send_message(chat_id=chat_id, text="Directory is empty.")
-            return
-
-        indexed = 0
-        await context.bot.send_message(chat_id=chat_id, text=f"Sending <code>{len(file_list)}</code> files from directory: \n<code>{file_path}</code>", parse_mode='HTML')
-        for fpath in file_list:
-            filename = os.path.basename(fpath)
-            file_entry = get_by_filename(filename)
-            sent = await send_file(context, chat_id, file_entry, fpath, filename)
-            if file_entry and sent:
-                indexed += 1
-        await context.bot.send_message(chat_id=chat_id, text=f"<code>{indexed}/{len(file_list)}</code> files were in the upload index.", parse_mode='HTML')
-        return
-
-    # single file support
-    elif os.path.isfile(file_path):
-        filename = os.path.basename(file_path)
-        file_entry = get_by_filename(filename)
-        if file_entry:
-            msg = await context.bot.send_message(chat_id=chat_id, text="File found in index, sending...")
-            sent = await send_file(context, chat_id, file_entry, file_path, filename)
-            await context.bot.delete_message(chat_id=chat_id, message_id=msg.message_id)
-        else:
-            await send_file(context, chat_id, None, file_path, filename)
-        return
-
-    else:
-        await context.bot.send_message(chat_id=chat_id, text="File or directory not found.")
-        return
-
-async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_owner(update, "Sent file"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
-        return
-    
-    filename, file_type, file_id, file_size, file_unique_id = extract_file_info(update.message)
-    file_info = None
-
-    idx = load_index()
-    if context.user_data.get('remove_next'):
-        # remove by file ID first
-        to_remove = None
-        for fname, entry in idx.items():
-            if entry.get("file_id") == file_id:
-                to_remove = fname
-                break
-        if to_remove:
-            entry = idx.pop(to_remove)
-            save_index(idx)
-            try:
-                if os.path.exists(entry["saved_path"]):
-                    os.remove(entry["saved_path"])
-                msg = f"File <code>{to_remove}</code> removed from index and disk (by file ID)."
-            except Exception as e:
-                msg = f"Removed from index, but failed to delete file: \n{e}"
-        else:
-            msg = "File not found in index (by file ID)."
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode='HTML', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Stop deleting", callback_data='stop_deleting')]]))
-        return
-
-    elif filename and file_id and file_type and file_size is not None:
-        if filename in idx or any(entry["file_id"] == file_id for entry in idx.values()):
-            if any(entry["file_id"] == file_id for entry in idx.values()):
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File <code>{filename}</code> was already in the index.", parse_mode='HTML')
-                return
-            else:
-                filename = normalize_filename(filename)
-                filename = f"{file_unique_id}_{filename}"
-        file_size_MB = round(file_size / 1000000, 2)
-        download_limit_MB = round(bot_download_limit / 1000000, 2)
-        filename = normalize_filename(filename)
-
-        if file_size > bot_download_limit:
-            # too large for Telegram bot download, create .tglink placeholder
-            save_path = os.path.join(upload_folder, f"{filename}.tglink")
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-            placeholder = {
-                "filename": filename,
-                "file_id": file_id,
-                "file_type": file_type,
-                "file_size": f"{file_size_MB}MB",
-                "download_limit": f"{download_limit_MB}MB",
-                "date_saved": datetime.now().isoformat(),
-                "note": "File size exceeds Telegram bot download limit. This placeholder is necessary for the file to be sent properly. Data in this file is for your reference, as it is nearly a copy of the index entry."
-            }
-
-            with open(save_path, "w") as f:
-                json.dump(placeholder, f, indent=2)
-            add_file_to_index(file_id, f"{filename}.tglink", file_type, save_path, file_size_MB)
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"File is too large for Telegram bot download. Indexed and placeholder created:\n<code>{save_path}</code>", parse_mode='HTML')
-            return
-
-        # report error if file is still too large
-        try: 
-            file_info = await context.bot.get_file(file_id)
-            save_path = os.path.join(upload_folder, filename)
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
-            await file_info.download_to_drive(save_path)
-            add_file_to_index(file_id, filename, file_type, save_path, file_size_MB)
-            await context.bot.edit_message_text(chat_id=update.effective_chat.id, message_id=msg.message_id, text=f"{file_type.capitalize()} saved: \n<code>{save_path}</code>", parse_mode='HTML')
-        except Exception as e:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Error downloading file: \n<code>{str(e)}</code> \n\nFile type: {file_type} \nDownload limit: {download_limit_MB}MB \nFile size: {file_size_MB}MB \nFile info: {file_info}", parse_mode='HTML')
-    else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
 
 async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/remove"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
+    query = update.callback_query
+    if query:
+        await query.answer()
     if context.args and " ".join(context.args) == "-c":
         await context.bot.send_message(chat_id=update.effective_chat.id, text="File removal canceled.")
         context.user_data['remove_next'] = False
@@ -892,7 +930,7 @@ async def media_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await handle_upload(update, context)
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_owner(update, "Unknown bot command"):
+    if not is_owner(update, "Invalid bot command"):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Invalid bot command. \nTry /start or /get")
@@ -930,11 +968,17 @@ if __name__ == '__main__':
     app = ApplicationBuilder().token(bot_token).post_init(parse_start_message).build()
 
     app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('tags', manage_tags_menu))
+    app.add_handler(CommandHandler('manage', manage_files_menu))
     app.add_handler(CommandHandler('get', get_file))
     app.add_handler(CommandHandler('remove', remove_file))
 
-    # tag handlers
+    # handlers for the manage files menu
+    app.add_handler(CallbackQueryHandler(manage_files_menu, pattern="^manage_files$"))
+    app.add_handler(CallbackQueryHandler(get_file, pattern="^get_file$"))
+    app.add_handler(CallbackQueryHandler(remove_file, pattern="^remove_file$"))
+    app.add_handler(CallbackQueryHandler(stop_deleting_callback, pattern="stop_deleting"))
+
+    # handlers for the manage tagging menu
     app.add_handler(CallbackQueryHandler(manage_tags_menu, pattern="manage_tags"))
     app.add_handler(CallbackQueryHandler(add_tag_prompt, pattern="add_tag"))
     app.add_handler(CallbackQueryHandler(delete_tag_prompt, pattern="^delete_tag"))
@@ -948,7 +992,7 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(untag_media_cancel, pattern="^untag_media_cancel"))
     app.add_handler(CallbackQueryHandler(untag_media_prompt, pattern="untag_media"))
 
-    app.add_handler(CallbackQueryHandler(stop_deleting_callback, pattern="stop_deleting"))
+    # handle callbacks not already handled
     app.add_handler(CallbackQueryHandler(button_handler))
 
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))

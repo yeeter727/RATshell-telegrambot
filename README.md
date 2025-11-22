@@ -32,6 +32,6 @@ Reccomended command list to send to [BotFather](https://t.me/botfather):
 ```
 start - open start menu
 get - /get <file_or_dir_path> • /get -t <file_type>
-tags - manage media tags for indexed files
+manage - open file management menu
 remove - delete selected files
 ```
