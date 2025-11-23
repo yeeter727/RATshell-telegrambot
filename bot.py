@@ -46,15 +46,18 @@ try:
 except NameError:
     testserver = False
 
-# create access_log if not found
-if not os.path.exists(access_log):
+def create_access_log():
     with open(access_log, 'w') as f:
         f.write(
             "#######################\n"
             "UNAUTHORIZED ACTION LOG\n"
             "#######################"
         )
-    logging.info("Created access_log file.")
+
+# create access_log if not found
+if not os.path.exists(access_log):
+    create_access_log()
+    logging.info(f"Created '{access_log}' file.")
 
 # check if user is the owner
 def is_owner(update, action):
@@ -1007,5 +1010,3 @@ if __name__ == '__main__':
 
 
     app.run_polling()
-
-
