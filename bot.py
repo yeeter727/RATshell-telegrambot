@@ -517,7 +517,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if os.path.isfile(os.path.join(file_path, f))
         ]
         if not file_list:
-            await context.bot.send_message(chat_id=chat_id, text="Directory is empty.")
+            await context.bot.send_message(chat_id=chat_id, text=f"Directory <code>{file_path}</code> is empty.", parse_mode='HTML')
             return
 
         indexed = 0
@@ -1005,3 +1005,4 @@ if __name__ == '__main__':
 
 
     app.run_polling()
+
