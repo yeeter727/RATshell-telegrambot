@@ -16,7 +16,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 from telegram.constants import ChatAction
 
-######### STARTUP #########
+######### startup and definitions #########
+
 # read config file
 if os.path.exists("tg.conf"):
     with open("tg.conf") as f:
@@ -66,7 +67,7 @@ def is_owner(update, action):
         username = "@" + str(update.effective_user.username) or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            f.write(f"\n[{now}] [{action}] User {username} ID: {user_id}")
+            f.write(f"\n[{now}] [{action}] User: {username} ID: {user_id}")
         logging.warning(f"Unauthorized user logged: {username}")
         return False
     else:
@@ -229,7 +230,17 @@ if win:
     else:
         fastfetch = True
 
+def build_main_menu():
+    keyboard = [
+        [InlineKeyboardButton("📡 Get IP Info", callback_data='get_ip')],
+        [InlineKeyboardButton("🖥 Neofetch", callback_data='run_neofetch')],
+        [InlineKeyboardButton("📄 Print Access Log", callback_data='print_log')],
+        [InlineKeyboardButton("📂 Manage Uploaded Files", callback_data='manage_files')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 ###########################
+###### async functions ####
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/start"):
@@ -237,13 +248,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     logging.info("Command /start used.")
 
-    keyboard = [
-        [InlineKeyboardButton("📡 Get IP Info", callback_data='get_ip')],
-        [InlineKeyboardButton("🖥 Neofetch", callback_data='run_neofetch')],
-        [InlineKeyboardButton("📄 Print Access Log", callback_data='print_log')],
-        [InlineKeyboardButton("📂 Manage Uploaded Files", callback_data='manage_files')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = build_main_menu()
     await update.message.reply_text(start_message, reply_markup=reply_markup, parse_mode='HTML')
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -314,20 +319,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(access_log, 'r') as file:
             content = file.read()
 
-        keyboard = [[InlineKeyboardButton("◀️ Back", callback_data='go_back')]]
+        keyboard = [[InlineKeyboardButton("◀️ Back", callback_data='go_back'), InlineKeyboardButton("🗑️ Clear log", callback_data='clear_log_confirm')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(text=f"{content}", reply_markup=reply_markup, parse_mode='HTML')
 
-    elif query.data == 'go_back':
-        # recreate the original menu
+    elif query.data == 'clear_log_confirm':
         keyboard = [
-            [InlineKeyboardButton("📡 Get IP Info", callback_data='get_ip')],
-            [InlineKeyboardButton("🖥 Neofetch", callback_data='run_neofetch')],
-            [InlineKeyboardButton("📄 Print Access Log", callback_data='print_log')],
-            [InlineKeyboardButton("📂 Manage Uploaded Files", callback_data='manage_files')]
+            [InlineKeyboardButton("🗑️ Clear log", callback_data='clear_log')],
+            [InlineKeyboardButton("◀️ Back", callback_data='print_log')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(text="Are you sure you want to clear the log?", reply_markup=reply_markup, parse_mode='HTML')
+
+    elif query.data == 'clear_log':
+        create_access_log()
+        logging.info(f"The '{access_log}' file was cleared.")
+
+        reply_markup = build_main_menu()
+        await query.edit_message_text(text=f"<b>Unauthorized action log cleared.</b>\n{start_message}", reply_markup=reply_markup, parse_mode='HTML')
+
+    elif query.data == 'go_back':
+        reply_markup = build_main_menu()
         await query.edit_message_text(text=start_message, reply_markup=reply_markup, parse_mode='HTML')
 
 async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send: bool = False):
@@ -1007,6 +1021,5 @@ if __name__ == '__main__':
 
     # route most media
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
-
 
     app.run_polling()
