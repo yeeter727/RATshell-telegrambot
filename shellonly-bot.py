@@ -88,8 +88,10 @@ async def parse_start_message(app):
         owner_un = "@" + str(chat.username) or f"{chat.first_name or ''} {chat.last_name or ''}".strip()
         if not owner_un:
             logging.warning("Owner chat returned no username/name.")
+            owner_un = "null"
     except Exception as e:
         logging.warning("Could not fetch owner username at startup: %s", e)
+        owner_un = "null"
     
     pwd = "<code>" + os.getcwd() + "</code>"
     os_user = "<code>" + str(getpass.getuser()) + "</code>"
@@ -115,4 +117,5 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('start', start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shell_commands))    # read messages as commands
     app.run_polling()
+
 
