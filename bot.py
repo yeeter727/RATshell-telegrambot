@@ -268,7 +268,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     output = "fastfetch not installed."
             else:
-                result = subprocess.run(['neofetch', '--stdout'], capture_output=True, text=True, timeout=10)
+                nf_cmd = "neofetch --stdout title underline distro model kernel uptime packages shell term cpu gpu memory disk"
+                result = subprocess.run([nf_cmd], capture_output=True, text=True, timeout=10)
                 output = result.stdout.strip() or "No output from neofetch."
         except Exception as e:
             output = f"Error: {str(e)}"
@@ -1021,5 +1022,6 @@ if __name__ == '__main__':
 
     # route most media
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
+
 
     app.run_polling()
