@@ -269,7 +269,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     output = "fastfetch not installed."
             else:
                 nf_cmd = "neofetch --stdout title underline distro model kernel uptime packages shell term cpu gpu memory disk"
-                result = subprocess.run([nf_cmd.split()], capture_output=True, text=True, timeout=10)
+                result = subprocess.run(nf_cmd.split(), capture_output=True, text=True, timeout=10)
                 output = result.stdout.strip() or "No output from neofetch."
         except Exception as e:
             output = f"Error: {str(e)}"
@@ -1025,4 +1025,5 @@ if __name__ == '__main__':
 
 
     app.run_polling()
+
 
