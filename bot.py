@@ -36,16 +36,24 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # (lazy) config fix
-try:
-    bot_download_limit
-    tags_file
-except NameError:
-    bot_download_limit = 20970496
-    tags_file = "tags.json"
-try:
-    testserver
-except NameError:
-    testserver = False
+def config_check():
+    try:
+        bot_download_limit
+    except NameError:
+        bot_download_limit = 20970496
+    try:
+        tags_file
+    except NameError:
+        tags_file = "tags.json"
+    try:
+        testserver
+    except NameError:
+        testserver = False
+    try:
+        send_access_denied_msg
+    except NameError:
+        send_access_denied_msg = False
+config_check()
 
 def create_access_log():
     with open(access_log, 'w') as f:
@@ -244,7 +252,8 @@ def build_main_menu():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/start"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
         return
     logging.info("Command /start used.")
 
@@ -393,7 +402,8 @@ async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     Can be invoked as /manage or via the button menu.
     """
     if not is_owner(update, "/manage"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     logging.info("Command /manage used.")
     query = update.callback_query
@@ -444,7 +454,8 @@ async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unsolicited message"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     else:
         command = update.message.text.strip()  # Get the command from the message
@@ -512,7 +523,8 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
 
 async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/get"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     query = update.callback_query
     if query:
@@ -609,7 +621,8 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Sent file"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     
     filename, file_type, file_id, file_size, file_unique_id = extract_file_info(update.message)
@@ -691,7 +704,8 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     Manages file tagging of indexed files.
     """
     if not is_owner(update, "Tag management menu"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     # Handles displaying the main tag management menu
     query = update.callback_query
@@ -949,7 +963,8 @@ async def view_tag_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/remove"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     query = update.callback_query
     if query:
@@ -991,7 +1006,8 @@ async def media_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Invalid bot command"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Invalid bot command. \nTry /start or /get")
 

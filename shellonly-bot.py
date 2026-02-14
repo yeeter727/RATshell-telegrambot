@@ -57,13 +57,15 @@ win = in_windows()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/start"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
         return
     await update.message.reply_text(start_message, parse_mode='HTML')
 
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unsolicited message"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
+        if send_access_denied_msg:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     else:        
         command = update.message.text.strip()
