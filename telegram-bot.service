@@ -1,0 +1,20 @@
+## Example systemd unit file (for easier management on Linux systems)
+# replace tg-bot with a user of your choice
+
+# location: /etc/systemd/system/telegram-bot.service
+
+[Unit]
+Description=RATshell-telegrambot
+After=network-online.target systemd-modules-load.service
+Wants=network-online.target systemd-modules-load.service
+ 
+[Service]
+User=tg-bot
+Group=tg-bot
+WorkingDirectory=/home/tg-bot/
+ExecStart=/usr/bin/python3 /home/tg-bot/bot.py
+Restart=on-failure
+RestartSec=5s
+ 
+[Install]
+WantedBy=multi-user.target

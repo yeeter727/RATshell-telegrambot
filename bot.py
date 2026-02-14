@@ -289,9 +289,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 s.close()
 
                 # get public IP addresses
-                pub_ipv4 = subprocess.run(['curl', '-s', ipv4_url], capture_output=True, text=True, timeout=10)
-                pub_ipv6 = subprocess.run(['curl', '-s', ipv6_url], capture_output=True, text=True, timeout=10)
-                output = f"Public IPv4 Address:\n<code>{pub_ipv4.stdout.strip()}</code>\n\nPublic IPv6 Address:\n<code>{pub_ipv6.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
+                try:
+                    if ipv4_url:
+                        pub_ipv4 = subprocess.run(['curl', '-s', ipv4_url], capture_output=True, text=True, timeout=10).stdout.strip()
+                    else:
+                        pub_ipv4 = "ipv4_url variable from tg.conf is blank"
+                except NameError:
+                    pub_ipv4 = "ipv4_url variable from tg.conf is undefined"
+
+                try:
+                    if ipv6_url:
+                        pub_ipv6 = subprocess.run(['curl', '-s', ipv6_url], capture_output=True, text=True, timeout=10).stdout.strip()
+                    else:
+                        pub_ipv6 = "ipv6_url variable from tg.conf is blank"
+                except NameError:
+                    pub_ipv6 = "ipv6_url variable from tg.conf is undefined"
+                output = f"Public IPv4 Address:\n<code>{pub_ipv4}</code>\n\nPublic IPv6 Address:\n<code>{pub_ipv6}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from curl or socket connection."
             elif win:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 s.connect(("9.9.9.9", 80))       # no actual connection made
@@ -299,18 +312,44 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 s.close()
 
                 # get public IP addresses
-                pub_ipv4 = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{ipv4_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10)
-                pub_ipv6 = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{ipv6_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10)
-                output = f"Public IPv4 Address:\n<code>{pub_ipv4.stdout.strip()}</code>\n\nPublic IPv6 Address:\n<code>{pub_ipv6.stdout.strip()}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from Invoke-WebRequest or socket connection."
+                try:
+                    if ipv4_url:
+                        pub_ipv4 = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{ipv4_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10).stdout.strip()
+                    else:
+                        pub_ipv4 = "ipv4_url variable from tg.conf is blank"
+                except NameError:
+                    pub_ipv4 = "ipv4_url variable from tg.conf is undefined"
+                
+                try:
+                    if ipv46_url:
+                        pub_ipv6 = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{ipv6_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10).stdout.strip()
+                    else:
+                        pub_ipv6 = "ipv6_url variable from tg.conf is blank"
+                except NameError:
+                    pub_ipv6 = "ipv6_url variable from tg.conf is undefined"
+                output = f"Public IPv4 Address:\n<code>{pub_ipv4}</code>\n\nPublic IPv6 Address:\n<code>{pub_ipv6}</code>\n\n\nLocal IP Address:\n<code>{local_ip.strip()}</code>" or "No output from Invoke-WebRequest or socket connection."
             else:
                 # get interfaces and addresses
                 ip_cmd = "ip -o -4 a | awk '$2 != \"lo\" {print $2, $4}'"
                 interfaces = subprocess.run(ip_cmd, shell=True, capture_output=True, text=True)
 
                 # get public IP addresses
-                pub_ipv4 = subprocess.run(['curl', '-s', ipv4_url], capture_output=True, text=True, timeout=10)
-                pub_ipv6 = subprocess.run(['curl', '-s', ipv6_url], capture_output=True, text=True, timeout=10)
-                output = f"Public IPv4 Address:\n<code>{pub_ipv4.stdout.strip()}</code>\n\nPublic IPv6 Address:\n<code>{pub_ipv6.stdout.strip()}</code>\n\n\nDevice Interfaces:\n<code>{interfaces.stdout.strip()}</code>" or "No output from curl or ip addr commands."
+                try:
+                    if ipv4_url:
+                        pub_ipv4 = subprocess.run(['curl', '-s', ipv4_url], capture_output=True, text=True, timeout=10).stdout.strip()
+                    else:
+                        pub_ipv4 = "ipv4_url variable from tg.conf is blank"
+                except NameError:
+                    pub_ipv4 = "ipv4_url variable from tg.conf is undefined"
+
+                try:
+                    if ipv6_url:
+                        pub_ipv6 = subprocess.run(['curl', '-s', ipv6_url], capture_output=True, text=True, timeout=10).stdout.strip()
+                    else:
+                        pub_ipv6 = "ipv6_url variable from tg.conf is blank"
+                except NameError:
+                    pub_ipv6 = "ipv6_url variable from tg.conf is undefined"
+                output = f"Public IPv4 Address:\n<code>{pub_ipv4}</code>\n\nPublic IPv6 Address:\n<code>{pub_ipv6}</code>\n\n\nDevice Interfaces:\n<code>{interfaces.stdout.strip()}</code>" or "No output from curl or ip addr commands."
         except Exception as e:
             output = f"Error: {str(e)}"
         
