@@ -23,8 +23,8 @@ if os.path.exists("tg.conf"):
     with open("tg.conf") as f:
         exec(f.read(), globals())
     # exit if default value
-    if owner_id == 123456789:
-        print("\nIt looks like the tg.conf file has default values. \nPlease make sure to add your ID and token to tg.conf.\n")
+    if bot_token == "987654321:asdfghjkl":
+        print("\nIt looks like the tg.conf file has default values. \nPlease make sure to add your bot token to tg.conf.\n")
         exit()
 else:
     print("Missing required tg.conf file.")
@@ -253,7 +253,12 @@ def build_main_menu():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/start"):
         if send_access_denied_msg:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="WARNING: Unknown user detected. \nAccess revoked. \n\nThis attempt has been logged.")
+            username = "@" + str(update.effective_user.username) or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"WARNING: Unknown user detected. \n\nThis attempt has been logged. \n\nUser: {username} \nUser ID: <code>{update.effective_user.id}</code>",
+                parse_mode='HTML'
+            )
         return
     logging.info("Command /start used.")
 
@@ -265,7 +270,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if not is_owner(update, f"{query.data} button"):
-        await query.edit_message_text(text="Access denied.")
+        if send_access_denied_msg:
+            await query.edit_message_text(text="Access denied.")
         return
 
     if query.data == 'run_neofetch':
