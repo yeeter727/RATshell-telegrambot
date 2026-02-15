@@ -36,24 +36,23 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # (lazy) config fix
-def config_check():
-    try:
-        bot_download_limit
-    except NameError:
-        bot_download_limit = 20970496
-    try:
-        tags_file
-    except NameError:
-        tags_file = "tags.json"
-    try:
-        testserver
-    except NameError:
-        testserver = False
-    try:
-        send_access_denied_msg
-    except NameError:
-        send_access_denied_msg = False
-config_check()
+try:
+    bot_download_limit
+except NameError:
+    bot_download_limit = 20970496
+try:
+    tags_file
+except NameError:
+    tags_file = "tags.json"
+try:
+    testserver
+except NameError:
+    testserver = False
+try:
+    send_access_denied_msg
+except NameError:
+    send_access_denied_msg = False
+
 
 def create_access_log():
     with open(access_log, 'w') as f:
