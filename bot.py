@@ -651,7 +651,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 msg = f"Removed from index, but failed to delete file: \n{e}"
         else:
-            msg = "File not found in index (by file ID)."
+            msg = f"File <code>{filename}</code> was not found in index (by file ID)."
         await context.bot.send_message(chat_id=update.effective_chat.id, text=msg, parse_mode='HTML', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Stop deleting", callback_data='stop_deleting')]]))
         return
 
