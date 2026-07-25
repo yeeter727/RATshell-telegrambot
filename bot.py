@@ -52,6 +52,10 @@ try:
     send_access_denied_msg
 except NameError:
     send_access_denied_msg = False
+try:
+    ignore_unauthorized_threshold
+except NameError:
+    ignore_unauthorized_threshold = 5
 
 
 def create_access_log(action):
@@ -69,10 +73,13 @@ if not os.path.exists(access_log):
     create_access_log("created")
     logging.info(f"Created '{access_log}' file.")
 
+unauthorized_msg_count = 0
 # check if user is the owner
 def is_owner(update, action):
     user_id = update.effective_user.id
     if user_id != owner_id:
+        global unauthorized_msg_count
+        unauthorized_msg_count += 1
         username = "@" + str(update.effective_user.username) or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
         with open(access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -253,7 +260,7 @@ def build_main_menu():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/start"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             username = "@" + str(update.effective_user.username) or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
@@ -271,7 +278,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if not is_owner(update, f"{query.data} button"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             await query.edit_message_text(text="Access denied.")
         return
 
@@ -413,7 +420,7 @@ async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     Can be invoked as /manage or via the button menu.
     """
     if not is_owner(update, "/manage"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     logging.info("Command /manage used.")
@@ -465,7 +472,7 @@ async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unsolicited message"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     else:
@@ -534,7 +541,7 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
 
 async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/get"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     query = update.callback_query
@@ -632,7 +639,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Sent file"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     
@@ -715,7 +722,7 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     Manages file tagging of indexed files.
     """
     if not is_owner(update, "Tag management menu"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     # Handles displaying the main tag management menu
@@ -974,7 +981,7 @@ async def view_tag_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/remove"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     query = update.callback_query
@@ -1017,7 +1024,7 @@ async def media_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Invalid bot command"):
-        if send_access_denied_msg:
+        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Invalid bot command. \nTry /start or /get")

@@ -6,16 +6,26 @@ With files that exceed the bot download limit (~20MB), it saves the file ID so t
 <img src="uploads/example.png" width="400"/>
 
 ### - Setup
-To run the bot directly (`python bot.py`), you'll need the `python-telegram-bot` module for all platforms:
+To run the bot, you'll need the `python-telegram-bot` module for all platforms:
 ```
 pip install python-telegram-bot
+# OR:
+sudo apt install python3-python-telegram-bot
 ```
 Additionally, for Linux:
 ```
 sudo apt install neofetch curl    # these are only necessary for some of the buttons
 ```
-
-**Remember to add your Telegram user ID and bot token to `tg.conf`!**
+Clone the repo and add your Telegram ID and bot token to `tg.conf`:
+```
+git clone https://github.com/yeeter727/RATshell-telegrambot
+cd RATshell-telegrambot
+echo "change info in tg.conf !"
+```
+Run the bot:
+```
+python bot.py
+```
 
   
 ### - Platforms
