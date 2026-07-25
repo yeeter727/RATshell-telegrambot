@@ -20,7 +20,7 @@ Clone the repo and add your Telegram ID and bot token to `tg.conf`:
 ```
 git clone https://github.com/yeeter727/RATshell-telegrambot
 cd RATshell-telegrambot
-echo "change info in tg.conf !"
+echo "change info in tg.conf"
 ```
 Run the bot:
 ```
