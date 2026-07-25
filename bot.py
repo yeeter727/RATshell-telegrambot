@@ -54,17 +54,19 @@ except NameError:
     send_access_denied_msg = False
 
 
-def create_access_log():
+def create_access_log(action):
     with open(access_log, 'w') as f:
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         f.write(
             "#######################\n"
             "UNAUTHORIZED ACTION LOG\n"
             "#######################"
+            f"\n[{now}] Log {action}."
         )
 
 # create access_log if not found
 if not os.path.exists(access_log):
-    create_access_log()
+    create_access_log("created")
     logging.info(f"Created '{access_log}' file.")
 
 # check if user is the owner
@@ -374,7 +376,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == 'print_log':
         with open(access_log, 'r') as file:
-            content = file.read()
+            if file.read(1):
+                content = file.read()
+            else:
+                create_access_log("created")
+                content = file.read()
 
         keyboard = [[InlineKeyboardButton("◀️ Back", callback_data='go_back'), InlineKeyboardButton("🗑️ Clear log", callback_data='clear_log_confirm')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -391,7 +397,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text="Are you sure you want to clear the log?", reply_markup=reply_markup, parse_mode='HTML')
 
     elif query.data == 'clear_log':
-        create_access_log()
+        create_access_log("cleared")
         logging.info(f"The '{access_log}' file was cleared.")
 
         reply_markup = build_main_menu()
