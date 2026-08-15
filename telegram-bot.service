@@ -12,7 +12,8 @@ Wants=network-online.target systemd-modules-load.service
 User=tg-bot
 Group=tg-bot
 WorkingDirectory=/home/tg-bot/
-ExecStart=/usr/bin/python3 /home/tg-bot/bot.py
+ExecStart=/home/tg-bot/tg-venv/bin/python /home/tg-bot/bot.py
+#ExecStart=/usr/bin/python3 /home/tg-bot/bot.py
 Restart=on-failure
 RestartSec=5s
  
