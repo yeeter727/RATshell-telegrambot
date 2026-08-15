@@ -11,6 +11,7 @@ import glob
 import unicodedata
 import re
 import getpass
+import time
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
@@ -48,6 +49,10 @@ try:
     testserver
 except NameError:
     testserver = False
+try:
+    new_message_path
+except NameError:
+    new_message_path = "message.json"
 try:
     send_access_denied_msg
 except NameError:
@@ -715,6 +720,121 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="The file you sent is not supported for upload.")
 
+async def check_message_file(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Check ./message.json and process multiple messages inside it.
+    Supported shapes:
+      - { "chat_id": ..., "text": "...", "run_cmd": "...", "remove_after": true }
+      - [ {...}, {...} ]
+      - { "messages": [ {...}, {...} ] }
+
+    Behavior:
+      - Atomically move message.json -> message.json.processing before reading.
+      - Process each message (send text, optionally run run_cmd).
+      - If a message has remove_after == False it will be preserved and written back to message.json.
+      - Otherwise the processing file is removed.
+    """
+    path = new_message_path
+    if not os.path.exists(path):
+        return
+
+    processing = f"{path}.processing"
+    try:
+        os.replace(path, processing)  # atomic move
+    except Exception as e:
+        logging.info(f"Could not move {path} for processing (maybe being written): {e}")
+        return
+
+    try:
+        with open(processing, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        logging.warning(f"Failed to read/parse {processing}: {e}")
+        try:
+            os.remove(processing)
+        except Exception:
+            pass
+        return
+
+    # Normalize to list of messages
+    if isinstance(data, list):
+        messages = data
+    elif isinstance(data, dict):
+        if isinstance(data.get("messages"), list):
+            messages = data["messages"]
+        else:
+            messages = [data]
+    else:
+        logging.warning(f"Unexpected JSON root in {processing}; removing file.")
+        try:
+            os.remove(processing)
+        except Exception:
+            pass
+        return
+
+    remaining = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            logging.warning("Skipping non-dict message element.")
+            continue
+
+        chat_id = msg.get("chat_id", owner_id)
+        text = msg.get("text")
+        run_cmd = msg.get("run_cmd")
+        remove_after = msg.get("remove_after", True)
+
+        # Send text (no splitting)
+        if text:
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=str(text), parse_mode='HTML')
+                logging.info(f"Sent text from {processing} to {chat_id}")
+            except Exception as e:
+                logging.warning(f"Failed to send text from {processing} to {chat_id}: {e}")
+
+        # Optionally run a command and send its output (no splitting)
+        if run_cmd:
+            try:
+                if win:
+                    proc = subprocess.run(run_cmd, shell=True, capture_output=True, text=True,
+                                          executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+                else:
+                    proc = subprocess.run(run_cmd, shell=True, capture_output=True, text=True, timeout=60)
+                output = (proc.stdout or "") + (proc.stderr or "")
+                if not output:
+                    output = "Command executed (no output)."
+                try:
+                    await context.bot.send_message(chat_id=chat_id, text=output)
+                except Exception as e:
+                    logging.warning(f"Failed to send command output to {chat_id}: {e}")
+                logging.info(f"Ran command from {processing} for {chat_id}: {run_cmd}")
+            except Exception as e:
+                try:
+                    await context.bot.send_message(chat_id=chat_id, text=f"Error running command: {e}")
+                except Exception:
+                    logging.warning(f"Failed to report command error to {chat_id}: {e}")
+
+        if not remove_after:
+            remaining.append(msg)
+
+    # finalize: if there are remaining messages, write them back atomically to message.json
+    try:
+        if remaining:
+            tmp_path = f"{path}.pending"
+            with open(tmp_path, "w", encoding="utf-8") as tf:
+                # If only one message, write an array for clarity (you can change this if you prefer an object)
+                json.dump(remaining, tf, indent=2)
+            os.replace(tmp_path, path)  # atomic write-back
+            logging.info(f"Kept {len(remaining)} message(s) for later in {path}")
+            try:
+                os.remove(processing)
+            except Exception:
+                logging.warning(f"Failed to remove processing file {processing} after writing remaining messages.")
+        else:
+            os.remove(processing)
+            logging.info(f"Processed and removed {processing}")
+    except Exception as e:
+        logging.warning(f"Failed to finalize processing for {processing}: {e}")
+
 
 ### file tagging functionality
 async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send=False):
@@ -1099,6 +1219,8 @@ if __name__ == '__main__':
     # route most media
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
 
+    # queue job to check for the new_message_path
+    app.job_queue.run_repeating(check_message_file, interval=60, first=10)
 
     app.run_polling()
 

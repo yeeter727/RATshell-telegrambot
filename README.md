@@ -6,11 +6,11 @@ With files that exceed the bot download limit (~20MB), it saves the file ID so t
 <img src="uploads/example.png" width="400"/>
 
 ### - Setup
-To run the bot, you'll need the `python-telegram-bot` module for all platforms:
+To run the bot, you'll need the `python-telegram-bot` module (and the job-queue dependency) for all platforms.
+You also might need a python virtual environment, which you can use like this:
 ```
-pip install python-telegram-bot
-# OR:
-sudo apt install python3-python-telegram-bot
+python -m venv tg-venv
+tg-venv/bin/pip install 'python-telegram-bot[job-queue]'
 ```
 Additionally, for Linux:
 ```
@@ -20,11 +20,10 @@ Clone the repo and add your Telegram ID and bot token to `tg.conf`:
 ```
 git clone https://github.com/yeeter727/RATshell-telegrambot
 cd RATshell-telegrambot
-echo "change info in tg.conf"
 ```
 Run the bot:
 ```
-python bot.py
+../tg-venv/bin/python bot.py
 ```
 
   
