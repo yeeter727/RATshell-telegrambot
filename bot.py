@@ -46,27 +46,27 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # (lazy) config fix
 try:
     CONF.bot_download_limit
-except NameError:
+except AttributeError:
     CONF.bot_download_limit = 20970496
 try:
     CONF.tags_file
-except NameError:
+except AttributeError:
     CONF.tags_file = "tags.json"
 try:
     CONF.testserver
-except NameError:
+except AttributeError:
     CONF.testserver = False
 try:
     CONF.new_message_path
-except NameError:
+except AttributeError:
     CONF.new_message_path = "message.json"
 try:
     CONF.send_access_denied_msg
-except NameError:
+except AttributeError:
     CONF.send_access_denied_msg = False
 try:
     CONF.ignore_unauthorized_threshold
-except NameError:
+except AttributeError:
     CONF.ignore_unauthorized_threshold = 5
 
 
