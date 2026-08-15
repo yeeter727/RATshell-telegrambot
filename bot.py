@@ -13,6 +13,7 @@ import re
 import getpass
 import time
 from datetime import datetime
+from types import SimpleNamespace
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 from telegram.constants import ChatAction
@@ -21,10 +22,16 @@ from telegram.constants import ChatAction
 
 # read config file
 if os.path.exists("tg.conf"):
+    config = {}
     with open("tg.conf") as f:
-        exec(f.read(), globals())
+        exec(f.read(), config)
+    # prepend config variables with CONF.
+    CONF = SimpleNamespace(
+        **{name: value for name, value in config.items()
+           if not name.startswith("__")}
+    )
     # exit if default value
-    if bot_token == "987654321:asdfghjkl":
+    if CONF.bot_token == "987654321:asdfghjkl":
         print("\nIt looks like the tg.conf file has default values. \nPlease make sure to add your bot token to tg.conf.\n")
         exit()
 else:
@@ -38,33 +45,33 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # (lazy) config fix
 try:
-    bot_download_limit
+    CONF.bot_download_limit
 except NameError:
-    bot_download_limit = 20970496
+    CONF.bot_download_limit = 20970496
 try:
-    tags_file
+    CONF.tags_file
 except NameError:
-    tags_file = "tags.json"
+    CONF.tags_file = "tags.json"
 try:
-    testserver
+    CONF.testserver
 except NameError:
-    testserver = False
+    CONF.testserver = False
 try:
-    new_message_path
+    CONF.new_message_path
 except NameError:
-    new_message_path = "message.json"
+    CONF.new_message_path = "message.json"
 try:
-    send_access_denied_msg
+    CONF.send_access_denied_msg
 except NameError:
-    send_access_denied_msg = False
+    CONF.send_access_denied_msg = False
 try:
-    ignore_unauthorized_threshold
+    CONF.ignore_unauthorized_threshold
 except NameError:
-    ignore_unauthorized_threshold = 5
+    CONF.ignore_unauthorized_threshold = 5
 
 
 def create_access_log(action):
-    with open(access_log, 'w') as f:
+    with open(CONF.access_log, 'w') as f:
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         f.write(
             "#######################\n"
@@ -74,19 +81,19 @@ def create_access_log(action):
         )
 
 # create access_log if not found
-if not os.path.exists(access_log):
+if not os.path.exists(CONF.access_log):
     create_access_log("created")
-    logging.info(f"Created '{access_log}' file.")
+    logging.info(f"Created '{CONF.access_log}' file.")
 
 unauthorized_msg_count = 0
 # check if user is the owner
 def is_owner(update, action):
     user_id = update.effective_user.id
-    if user_id != owner_id:
+    if user_id != CONF.owner_id:
         global unauthorized_msg_count
         unauthorized_msg_count += 1
         username = "@" + str(update.effective_user.username) or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
-        with open(access_log, "a") as f:
+        with open(CONF.access_log, "a") as f:
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             f.write(f"\n[{now}] [{action}] User: {username} ID: {user_id}")
         logging.warning(f"Unauthorized user logged: {username}")
@@ -95,23 +102,23 @@ def is_owner(update, action):
         return True
 
 def load_index():
-    if os.path.exists(file_index):
-        with open(file_index, "r") as f:
+    if os.path.exists(CONF.file_index):
+        with open(CONF.file_index, "r") as f:
             return json.load(f)
     return {}
 
 def save_index(index):
-    with open(file_index, "w") as f:
+    with open(CONF.file_index, "w") as f:
         json.dump(index, f, indent=2)
 
 def load_tags():
-    if os.path.exists(tags_file):
-        with open(tags_file, "r") as f:
+    if os.path.exists(CONF.tags_file):
+        with open(CONF.tags_file, "r") as f:
             return json.load(f)
     return []
 
 def save_tags(tags):
-    with open(tags_file, "w") as f:
+    with open(CONF.tags_file, "w") as f:
         json.dump(tags, f, indent=2)
 
 def add_file_to_index(file_id, filename, file_type, saved_path, file_size_MB):
@@ -265,7 +272,7 @@ def build_main_menu():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/start"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             username = "@" + str(update.effective_user.username) or f"{update.effective_user.first_name or ''} {update.effective_user.last_name or ''}".strip()
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
@@ -276,14 +283,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("Command /start used.")
 
     reply_markup = build_main_menu()
-    await update.message.reply_text(start_message, reply_markup=reply_markup, parse_mode='HTML')
+    await update.message.reply_text(CONF.start_message, reply_markup=reply_markup, parse_mode='HTML')
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if not is_owner(update, f"{query.data} button"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             await query.edit_message_text(text="Access denied.")
         return
 
@@ -318,16 +325,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # get public IP addresses
                 try:
-                    if ipv4_url:
-                        pub_ipv4 = subprocess.run(['curl', '-s', ipv4_url], capture_output=True, text=True, timeout=10).stdout.strip()
+                    if CONF.ipv4_url:
+                        pub_ipv4 = subprocess.run(['curl', '-s', CONF.ipv4_url], capture_output=True, text=True, timeout=10).stdout.strip()
                     else:
                         pub_ipv4 = "ipv4_url variable from tg.conf is blank"
                 except NameError:
                     pub_ipv4 = "ipv4_url variable from tg.conf is undefined"
 
                 try:
-                    if ipv6_url:
-                        pub_ipv6 = subprocess.run(['curl', '-s', ipv6_url], capture_output=True, text=True, timeout=10).stdout.strip()
+                    if CONF.ipv6_url:
+                        pub_ipv6 = subprocess.run(['curl', '-s', CONF.ipv6_url], capture_output=True, text=True, timeout=10).stdout.strip()
                     else:
                         pub_ipv6 = "ipv6_url variable from tg.conf is blank"
                 except NameError:
@@ -341,16 +348,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # get public IP addresses
                 try:
-                    if ipv4_url:
-                        pub_ipv4 = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{ipv4_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10).stdout.strip()
+                    if CONF.ipv4_url:
+                        pub_ipv4 = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{CONF.ipv4_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10).stdout.strip()
                     else:
                         pub_ipv4 = "ipv4_url variable from tg.conf is blank"
                 except NameError:
                     pub_ipv4 = "ipv4_url variable from tg.conf is undefined"
                 
                 try:
-                    if ipv46_url:
-                        pub_ipv6 = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{ipv6_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10).stdout.strip()
+                    if CONF.ipv6_url:
+                        pub_ipv6 = subprocess.run(f"$ProgressPreference = 'SilentlyContinue'; (Invoke-WebRequest '{CONF.ipv6_url}').Content", shell=True, capture_output=True, text=True, executable=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", timeout=10).stdout.strip()
                     else:
                         pub_ipv6 = "ipv6_url variable from tg.conf is blank"
                 except NameError:
@@ -363,16 +370,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 # get public IP addresses
                 try:
-                    if ipv4_url:
-                        pub_ipv4 = subprocess.run(['curl', '-s', ipv4_url], capture_output=True, text=True, timeout=10).stdout.strip()
+                    if CONF.ipv4_url:
+                        pub_ipv4 = subprocess.run(['curl', '-s', CONF.ipv4_url], capture_output=True, text=True, timeout=10).stdout.strip()
                     else:
                         pub_ipv4 = "ipv4_url variable from tg.conf is blank"
                 except NameError:
                     pub_ipv4 = "ipv4_url variable from tg.conf is undefined"
 
                 try:
-                    if ipv6_url:
-                        pub_ipv6 = subprocess.run(['curl', '-s', ipv6_url], capture_output=True, text=True, timeout=10).stdout.strip()
+                    if CONF.ipv6_url:
+                        pub_ipv6 = subprocess.run(['curl', '-s', CONF.ipv6_url], capture_output=True, text=True, timeout=10).stdout.strip()
                     else:
                         pub_ipv6 = "ipv6_url variable from tg.conf is blank"
                 except NameError:
@@ -387,7 +394,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text=output, reply_markup=reply_markup, parse_mode='HTML')
 
     elif query.data == 'print_log':
-        with open(access_log, 'r') as file:
+        with open(CONF.access_log, 'r') as file:
             if file.read(1):
                 content = file.read()
             else:
@@ -410,14 +417,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == 'clear_log':
         create_access_log("cleared")
-        logging.info(f"The '{access_log}' file was cleared.")
+        logging.info(f"The '{CONF.access_log}' file was cleared.")
 
         reply_markup = build_main_menu()
-        await query.edit_message_text(text=f"<b>Unauthorized action log cleared.</b>\n{start_message}", reply_markup=reply_markup, parse_mode='HTML')
+        await query.edit_message_text(text=f"<b>Unauthorized action log cleared.</b>\n{CONF.start_message}", reply_markup=reply_markup, parse_mode='HTML')
 
     elif query.data == 'go_back':
         reply_markup = build_main_menu()
-        await query.edit_message_text(text=start_message, reply_markup=reply_markup, parse_mode='HTML')
+        await query.edit_message_text(text=CONF.start_message, reply_markup=reply_markup, parse_mode='HTML')
 
 async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send: bool = False):
     """
@@ -425,7 +432,7 @@ async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     Can be invoked as /manage or via the button menu.
     """
     if not is_owner(update, "/manage"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     logging.info("Command /manage used.")
@@ -477,7 +484,7 @@ async def manage_files_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 async def handle_shell_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Unsolicited message"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     else:
@@ -505,15 +512,15 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
             if file_type == "document":
                 await context.bot.send_document(chat_id=chat_id, document=file_id)
             elif file_type == "photo":
-                await context.bot.send_photo(chat_id=chat_id, photo=file_id, has_spoiler=testserver)
+                await context.bot.send_photo(chat_id=chat_id, photo=file_id, has_spoiler=CONF.testserver)
             elif file_type == "video":
-                await context.bot.send_video(chat_id=chat_id, video=file_id, has_spoiler=testserver)
+                await context.bot.send_video(chat_id=chat_id, video=file_id, has_spoiler=CONF.testserver)
             elif file_type == "audio":
                 await context.bot.send_audio(chat_id=chat_id, audio=file_id)
             elif file_type == "voice":
                 await context.bot.send_voice(chat_id=chat_id, voice=file_id)
             elif file_type == "animation":
-                await context.bot.send_animation(chat_id=chat_id, animation=file_id, has_spoiler=testserver)
+                await context.bot.send_animation(chat_id=chat_id, animation=file_id, has_spoiler=CONF.testserver)
             elif file_type == "sticker":
                 await context.bot.send_sticker(chat_id=chat_id, sticker=file_id)
             sent = True
@@ -525,15 +532,15 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
             with open(file_path, "rb") as f:
                 if file_entry:
                     if file_type == "photo":
-                        await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=testserver)
+                        await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=CONF.testserver)
                     elif file_type == "video":
-                        await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=testserver)
+                        await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=CONF.testserver)
                     elif file_type == "audio":
                         await context.bot.send_audio(chat_id=chat_id, audio=f)
                     elif file_type == "voice":
                         await context.bot.send_voice(chat_id=chat_id, voice=f)
                     elif file_type == "animation":
-                        await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=testserver)
+                        await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=CONF.testserver)
                     elif file_type == "sticker":
                         await context.bot.send_sticker(chat_id=chat_id, sticker=f)
                     else:
@@ -546,7 +553,7 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
 
 async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/get"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     query = update.callback_query
@@ -560,8 +567,8 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not context.args:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="/get usage: \n<code>/get path/to/file.txt</code> \nGet everything in a folder:\n<code>/get path/to/dir/</code> \nBy type: <code>/get -t video</code> \n\nUsing without arguments shows everything in the upload folder.", parse_mode='HTML')
-        if not testserver:
-            file_path = os.path.normpath(upload_folder)
+        if not CONF.testserver:
+            file_path = os.path.normpath(CONF.upload_folder)
         else:
             return
     elif context.args[0] and context.args[0] == "-t":
@@ -644,7 +651,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Sent file"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     
@@ -682,12 +689,12 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 filename = normalize_filename(filename)
                 filename = f"{file_unique_id}_{filename}"
         file_size_MB = round(file_size / 1000000, 2)
-        download_limit_MB = round(bot_download_limit / 1000000, 2)
+        download_limit_MB = round(CONF.bot_download_limit / 1000000, 2)
         filename = normalize_filename(filename)
 
-        if file_size > bot_download_limit:
+        if file_size > CONF.bot_download_limit:
             # too large for Telegram bot download, create .tglink placeholder
-            save_path = os.path.join(upload_folder, f"{filename}.tglink")
+            save_path = os.path.join(CONF.upload_folder, f"{filename}.tglink")
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
             placeholder = {
@@ -709,7 +716,7 @@ async def handle_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # report error if file is still too large
         try: 
             file_info = await context.bot.get_file(file_id)
-            save_path = os.path.join(upload_folder, filename)
+            save_path = os.path.join(CONF.upload_folder, filename)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="Saving file...")
             await file_info.download_to_drive(save_path)
@@ -734,7 +741,7 @@ async def check_message_file(context: ContextTypes.DEFAULT_TYPE):
       - If a message has remove_after == False it will be preserved and written back to message.json.
       - Otherwise the processing file is removed.
     """
-    path = new_message_path
+    path = CONF.new_message_path
     if not os.path.exists(path):
         return
 
@@ -778,7 +785,7 @@ async def check_message_file(context: ContextTypes.DEFAULT_TYPE):
             logging.warning("Skipping non-dict message element.")
             continue
 
-        chat_id = msg.get("chat_id", owner_id)
+        chat_id = msg.get("chat_id", CONF.owner_id)
         text = msg.get("text")
         run_cmd = msg.get("run_cmd")
         remove_after = msg.get("remove_after", True)
@@ -842,7 +849,7 @@ async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, s
     Manages file tagging of indexed files.
     """
     if not is_owner(update, "Tag management menu"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     # Handles displaying the main tag management menu
@@ -1101,7 +1108,7 @@ async def view_tag_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def remove_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "/remove"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     query = update.callback_query
@@ -1144,7 +1151,7 @@ async def media_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update, "Invalid bot command"):
-        if send_access_denied_msg and unauthorized_msg_count <= ignore_unauthorized_threshold:
+        if CONF.send_access_denied_msg and unauthorized_msg_count <= CONF.ignore_unauthorized_threshold:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="Access denied.")
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Invalid bot command. \nTry /start or /get")
@@ -1153,7 +1160,7 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # function to replace placeholders in the start message
 async def parse_start_message(app):
     try:
-        chat = await app.bot.get_chat(owner_id)
+        chat = await app.bot.get_chat(CONF.owner_id)
         owner_un = "@" + str(chat.username) or f"{chat.first_name or ''} {chat.last_name or ''}".strip()
         if not owner_un:
             logging.warning("Owner chat returned no username/name.")
@@ -1166,22 +1173,22 @@ async def parse_start_message(app):
     os_user = "<code>" + str(getpass.getuser()) + "</code>"
     hostname = "<code>" + str(socket.gethostname()) + "</code>"
 
-    original = start_message
+    original = CONF.start_message
 
     # changes at runtime, doesn't actually edit tg.conf
-    globals()['start_message'] = start_message.replace("OWNER_USERNAME", owner_un)
-    globals()['start_message'] = start_message.replace("OWNER_ID", str(owner_id))
-    globals()['start_message'] = start_message.replace("WORKING_DIR", pwd)
-    globals()['start_message'] = start_message.replace("OS_USER", os_user)
-    globals()['start_message'] = start_message.replace("OS_HOSTNAME", hostname)
+    CONF.start_message = CONF.start_message.replace("OWNER_USERNAME", owner_un)
+    CONF.start_message = CONF.start_message.replace("OWNER_ID", str(CONF.owner_id))
+    CONF.start_message = CONF.start_message.replace("WORKING_DIR", pwd)
+    CONF.start_message = CONF.start_message.replace("OS_USER", os_user)
+    CONF.start_message = CONF.start_message.replace("OS_HOSTNAME", hostname)
 
     # only log if something actually changed
-    if start_message != original:
+    if CONF.start_message != original:
         logging.info("Replaced placholders in the start message.")
 
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(bot_token).post_init(parse_start_message).build()
+    app = ApplicationBuilder().token(CONF.bot_token).post_init(parse_start_message).build()
 
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('manage', manage_files_menu))
