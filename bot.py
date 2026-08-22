@@ -43,6 +43,9 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 # comment the following line if you want to log all http requests
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+# turn off individual job logging
+logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
+
 # (lazy) config fix
 try:
     CONF.bot_download_limit
