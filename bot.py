@@ -530,21 +530,46 @@ async def send_file(context, chat_id, file_entry, file_path, filename):
         try:
             await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.UPLOAD_DOCUMENT)
             with open(file_path, "rb") as f:
-                if file_entry:
-                    if file_type == "photo":
-                        await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=CONF.testserver)
-                    elif file_type == "video":
-                        await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=CONF.testserver)
-                    elif file_type == "audio":
-                        await context.bot.send_audio(chat_id=chat_id, audio=f)
-                    elif file_type == "voice":
-                        await context.bot.send_voice(chat_id=chat_id, voice=f)
-                    elif file_type == "animation":
-                        await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=CONF.testserver)
-                    elif file_type == "sticker":
-                        await context.bot.send_sticker(chat_id=chat_id, sticker=f)
+                # Determine what to send: prefer the indexed file_type, otherwise infer from extension
+                if file_entry and "file_type" in file_entry:
+                    send_type = file_entry.get("file_type")
+                else:
+                    ext = os.path.splitext(filename or file_path)[1].lower()
+                    # Common mappings (best-effort)
+                    if ext in ('.jpg', '.jpeg', '.png', '.bmp'):
+                        send_type = 'photo'
+                    elif ext in ('.webp',):
+                        # webp is often an image or a sticker; treat as photo by default
+                        send_type = 'photo'
+                    elif ext in ('.mp4', '.mkv', '.mov', '.avi', '.webm'):
+                        send_type = 'video'
+                    elif ext in ('.gif',):
+                        # treat gifs as animations
+                        send_type = 'animation'
+                    elif ext in ('.mp3', '.wav', '.m4a', '.flac', '.aac'):
+                        send_type = 'audio'
+                    elif ext in ('.ogg',):
+                        # .ogg is commonly used for voice notes on Telegram
+                        send_type = 'voice'
+                    elif ext in ('.tgs',):
+                        # tgs is Telegram vector sticker format
+                        send_type = 'sticker'
                     else:
-                        await context.bot.send_document(chat_id=chat_id, document=f)
+                        send_type = 'document'
+
+                # Send according to the determined type
+                if send_type == 'photo':
+                    await context.bot.send_photo(chat_id=chat_id, photo=f, has_spoiler=CONF.testserver)
+                elif send_type == 'video':
+                    await context.bot.send_video(chat_id=chat_id, video=f, has_spoiler=CONF.testserver)
+                elif send_type == 'audio':
+                    await context.bot.send_audio(chat_id=chat_id, audio=f)
+                elif send_type == 'voice':
+                    await context.bot.send_voice(chat_id=chat_id, voice=f)
+                elif send_type == 'animation':
+                    await context.bot.send_animation(chat_id=chat_id, animation=f, has_spoiler=CONF.testserver)
+                elif send_type == 'sticker':
+                    await context.bot.send_sticker(chat_id=chat_id, sticker=f)
                 else:
                     await context.bot.send_document(chat_id=chat_id, document=f)
         except Exception as e:
@@ -740,6 +765,7 @@ async def check_message_file(context: ContextTypes.DEFAULT_TYPE):
       - Process each message (send text, optionally run run_cmd).
       - If a message has remove_after == False it will be preserved and written back to message.json.
       - Otherwise the processing file is removed.
+      - If a message has file_path, call get_file to send that file (reuses /get logic).
     """
     path = CONF.new_message_path
     if not os.path.exists(path):
@@ -789,6 +815,7 @@ async def check_message_file(context: ContextTypes.DEFAULT_TYPE):
         text = msg.get("text")
         run_cmd = msg.get("run_cmd")
         remove_after = msg.get("remove_after", True)
+        file_path = msg.get("file_path")
 
         # Send text (no splitting)
         if text:
@@ -797,6 +824,33 @@ async def check_message_file(context: ContextTypes.DEFAULT_TYPE):
                 logging.info(f"Sent text from {processing} to {chat_id}")
             except Exception as e:
                 logging.warning(f"Failed to send text from {processing} to {chat_id}: {e}")
+
+        # If file_path present, hand it off to get_file (reusing /get behavior)
+        if file_path:
+            # Preserve previous context.args and restore afterwards
+            prev_args = getattr(context, "args", None)
+            context.args = [file_path]
+            # Build a minimal dummy Update expected by get_file/is_owner
+            dummy_update = SimpleNamespace(
+                effective_chat=SimpleNamespace(id=chat_id),
+                effective_user=SimpleNamespace(id=CONF.owner_id),
+                message=None,
+                callback_query=None
+            )
+            try:
+                logging.info(f"Sending file from {processing} to {chat_id}: {file_path}")
+                await get_file(dummy_update, context)
+            except Exception as e:
+                logging.warning(f"Failed to send file from {processing} to {chat_id}: {e}")
+            finally:
+                # restore context.args
+                if prev_args is not None:
+                    context.args = prev_args
+                else:
+                    try:
+                        delattr(context, "args")
+                    except Exception:
+                        context.args = []
 
         # Optionally run a command and send its output (no splitting)
         if run_cmd:
@@ -841,7 +895,6 @@ async def check_message_file(context: ContextTypes.DEFAULT_TYPE):
             logging.info(f"Processed and removed {processing}")
     except Exception as e:
         logging.warning(f"Failed to finalize processing for {processing}: {e}")
-
 
 ### file tagging functionality
 async def manage_tags_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, send=False):
