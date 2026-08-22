@@ -1283,8 +1283,6 @@ if __name__ == '__main__':
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO | filters.VIDEO | filters.AUDIO | filters.VOICE | filters.ANIMATION | filters.Sticker.ALL, media_router))
 
     # queue job to check for the new_message_path
-    app.job_queue.run_repeating(check_message_file, interval=60, first=10)
+    app.job_queue.run_repeating(check_message_file, interval=20, first=10)
 
     app.run_polling()
-
-
